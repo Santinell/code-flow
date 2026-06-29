@@ -1,0 +1,77 @@
+diff --git a/src/routes/users.ts b/src/routes/users.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/routes/users.ts
+@@ -0,0 +1,5 @@
++export async function getUser(req, res) {
++  const { email } = req.query;
++  const user = await db.user.findUnique({ where: { email } });
++  res.json(user);
++}
+diff --git a/src/config/payments.ts b/src/config/payments.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/config/payments.ts
+@@ -0,0 +1,4 @@
++export const paymentConfig = {
++  apiKey: process.env.STRIPE_API_KEY,
++  webhookToleranceMs: 300000,
++};
+diff --git a/src/components/Profile.tsx b/src/components/Profile.tsx
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/components/Profile.tsx
+@@ -0,0 +1,5 @@
++type Props = { bio: string };
++
++export function Profile({ bio }: Props) {
++  return <p>{bio}</p>;
++}
+diff --git a/src/auth/password.ts b/src/auth/password.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/auth/password.ts
+@@ -0,0 +1,6 @@
++export function validatePassword(password: string) {
++  if (password.length < 12) return false;
++  if (!/[A-Z]/.test(password)) return false;
++  if (!/[0-9]/.test(password)) return false;
++  return true;
++}
+diff --git a/src/middleware/auth.ts b/src/middleware/auth.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/middleware/auth.ts
+@@ -0,0 +1,5 @@
++export async function requireAdmin(req, res, next) {
++  if (!req.user) return res.status(401).send("Unauthorized");
++  if (req.user.role !== "admin") return res.status(403).send("Forbidden");
++  return next();
++}
+diff --git a/src/services/invoices.ts b/src/services/invoices.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/services/invoices.ts
+@@ -0,0 +1,5 @@
++export async function sendInvoice(invoiceId: string) {
++  const invoice = await invoiceRepository.findById(invoiceId);
++  await emailClient.send(invoice.email, renderInvoice(invoice));
++  return { sent: true };
++}
+diff --git a/src/utils/format.ts b/src/utils/format.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/utils/format.ts
+@@ -0,0 +1,5 @@
++export function formatDisplayName(firstName: string, lastName: string) {
++  const first = firstName.trim();
++  const last = lastName.trim();
++  return [first, last].filter(Boolean).join(" ");
++}

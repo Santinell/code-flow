@@ -1,0 +1,19 @@
+import pino from 'pino';
+import { getEnv } from '../config/env.js';
+
+const env = getEnv();
+
+export const logger = pino({
+  level: env.LOG_LEVEL,
+  transport: {
+    target: 'pino/file',
+    options: { destination: 1 }, // stdout
+  },
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+});
+
+export function createLogger(context: string) {
+  return logger.child({ context });
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "sortPackageJson": false,
+  "sortImports": {
+    "customGroups": [
+      {
+        "groupName": "loadFirst",
+        "elementNamePattern": ["**/mock-embeddings-indexer.ts"],
+        "modifiers": ["side_effect"]
+      },
+      {
+        "groupName": "hash",
+        "elementNamePattern": ["#*/**"]
+      }
+    ],
+    "groups": [
+      ["loadFirst"],
+      ["type"],
+      ["external"],
+      ["builtin"],
+      ["internal"],
+      ["hash"],
+      ["parent", "sibling"],
+      "index"
+    ],
+    "sortSideEffects": true,
+    "internalPattern": ["^@jvo/"],
+    "newlinesBetween": false
+  },
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "bracketSpacing": true,
+  "tabWidth": 2,
+  "printWidth": 100,
+  "endOfLine": "lf"
+}

@@ -1,0 +1,15 @@
+node_modules
+dist
+.kiro
+.kilo
+.env
+.codex
+tmp
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.log
+tsconfig.tsbuildinfo
+rpg_bot/data
+rpg_bot/logs

@@ -1,0 +1,20 @@
+{
+  "name": "eval-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal project fixture for developer agent evals",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "lint": "oxlint .",
+    "format:check": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "oxfmt": "^0.50.0",
+    "oxlint": "^1.65.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
