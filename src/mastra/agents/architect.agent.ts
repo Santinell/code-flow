@@ -38,6 +38,9 @@ export const architectAgent = new Agent({
       maxRetries: 3,
     },
     providerOptions: {
+      anthropic: {
+        reasoningEffort: 'high',
+      },
       openai: {
         reasoningEffort: 'high',
       },
