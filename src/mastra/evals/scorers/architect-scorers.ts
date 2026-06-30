@@ -1,3 +1,4 @@
+import type { ArchitectDatasetItem } from '../datasets/architect.dataset.js';
 import {
   createScorer,
   ScorerRunInputForAgent,
@@ -11,7 +12,6 @@ import {
 import { z } from 'zod';
 import { ArchitectGenerateOutput } from '../../workflows/architect.workflow.types.js';
 import { enableJsonPromptInjection, judgeConfig, judgeModel } from './shared.js';
-import type { ArchitectDatasetItem } from '../datasets/architect.dataset.js';
 
 // Store ground truth data indexed by input text for scorer access
 const groundTruthByInput = new Map<string, ArchitectDatasetItem['groundTruth']>();
@@ -23,7 +23,9 @@ export function setGroundTruthData(items: ArchitectDatasetItem[]) {
   }
 }
 
-function getGroundTruthForRun(run: { input?: ScorerRunInputForAgent }): ArchitectDatasetItem['groundTruth'] | undefined {
+function getGroundTruthForRun(run: {
+  input?: ScorerRunInputForAgent;
+}): ArchitectDatasetItem['groundTruth'] | undefined {
   const inputText = getInputText(run.input);
   return groundTruthByInput.get(inputText);
 }
@@ -489,7 +491,8 @@ Format:
 
 export const architectCompletenessScorer = createScorer({
   id: 'architect-completeness',
-  description: 'Evaluates whether the architect output is complete according to ground truth expectations',
+  description:
+    'Evaluates whether the architect output is complete according to ground truth expectations',
   type: 'agent',
   judge: {
     ...judgeConfig,
@@ -518,7 +521,8 @@ export const architectCompletenessScorer = createScorer({
       explanation: z.string(),
     }),
     createPrompt: ({ results }) => {
-      const { inputText, response, groundTruth, actualTasks, needsClarification } = results.preprocessStepResult ?? {};
+      const { inputText, response, groundTruth, actualTasks, needsClarification } =
+        results.preprocessStepResult ?? {};
 
       if (needsClarification || !response || !groundTruth) {
         return `The architect requested clarification or ground truth is not available. Score as complete (1.0).

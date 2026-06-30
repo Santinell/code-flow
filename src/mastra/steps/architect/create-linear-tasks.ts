@@ -1,6 +1,7 @@
 import { createStep } from '@mastra/core/workflows';
 import * as db from '../../../db/index.js';
 import * as linear from '../../../integrations/linear.js';
+import { getTeam } from '../../../integrations/linear.js';
 import * as telegram from '../../../integrations/telegram.js';
 import { createLogger } from '../../../utils/logger.js';
 import { escapeMarkdown } from '../../../utils/telegram-md.js';
@@ -9,7 +10,6 @@ import {
   architectCreateTasksInputSchema,
   architectWorkflowOutputSchema,
 } from '../../workflows/architect.workflow.types.js';
-import { getTeam } from '../../../integrations/linear.js';
 
 const log = createLogger('create-linear-tasks-step');
 

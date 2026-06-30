@@ -1,9 +1,9 @@
 import { runEvals } from '@mastra/core/evals';
+import { getEnv } from '../../../../config/env.js';
 import { architectAgent } from '../../../agents/architect.agent.js';
 import { architectGenerateOutputSchema } from '../../../workflows/architect.workflow.types.js';
 import { architectDataset } from '../../datasets/architect.dataset.js';
 import { architectScorers, setGroundTruthData } from '../../scorers/index.js';
-import { getEnv } from '../../../../config/env.js';
 
 export const env = getEnv();
 

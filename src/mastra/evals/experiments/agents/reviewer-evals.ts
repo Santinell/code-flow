@@ -3,6 +3,7 @@ import { execa } from 'execa';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { getEnv } from '../../../../config/env.js';
 import {
   applyPatch,
   cleanForce,
@@ -11,13 +12,12 @@ import {
   resetHard,
   stageAllFiles,
 } from '../../../../integrations/git.js';
+import { createLogger } from '../../../../utils/logger.js';
 import { runInWorktree } from '../../../../utils/worktree-context.js';
 import { reviewerAgent } from '../../../agents/reviewer.agent.js';
 import { reviewerGenerateOutputSchema } from '../../../workflows/reviewer.workflow.types.js';
 import { ReviewerDatasetItem, reviewerDataset } from '../../datasets/reviewer.dataset.js';
 import { reviewerScorers } from '../../scorers/index.js';
-import { getEnv } from '../../../../config/env.js';
-import { createLogger } from '../../../../utils/logger.js';
 
 export const log = createLogger('reviewer-eval');
 export const REVIEWER_SANDBOX_PREFIX = 'reviewer-sandbox-';

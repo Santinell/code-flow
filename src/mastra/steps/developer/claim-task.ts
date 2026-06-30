@@ -1,6 +1,6 @@
 import { createStep } from '@mastra/core/workflows';
-import * as linear from '../../../integrations/linear.js';
 import { getEnv } from '../../../config/env.js';
+import * as linear from '../../../integrations/linear.js';
 import { createLogger } from '../../../utils/logger.js';
 import {
   developerClaimTaskOutputSchema,

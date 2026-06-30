@@ -3,6 +3,7 @@ import { execa } from 'execa';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { getEnv } from '../../../../config/env.js';
 import {
   cleanForce,
   commitFiles,
@@ -11,12 +12,11 @@ import {
   stageAllFiles,
 } from '../../../../integrations/git.js';
 import { runProjectTests } from '../../../../utils/exec.js';
+import { createLogger } from '../../../../utils/logger.js';
 import { runInWorktree } from '../../../../utils/worktree-context.js';
 import { developerAgent } from '../../../agents/developer.agent.js';
 import { developerDataset } from '../../datasets/developer.dataset.js';
 import { developerScorers, trajectoryScorers } from '../../scorers/index.js';
-import { getEnv } from '../../../../config/env.js';
-import { createLogger } from '../../../../utils/logger.js';
 
 export const log = createLogger('developer-eval');
 export const env = getEnv();

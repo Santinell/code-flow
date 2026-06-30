@@ -34,7 +34,9 @@ const PRIORITY_LABELS: Record<number, string> = {
   4: '🟢 Низкий',
 };
 
-function formatTasksSummary(tasks: { title: string; description: string; priority: number }[]): string {
+function formatTasksSummary(
+  tasks: { title: string; description: string; priority: number }[]
+): string {
   const header = `📋 *Сформированы задачи* (${tasks.length}):\n`;
   const items = tasks
     .map((task, i) => {

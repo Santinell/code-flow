@@ -11,5 +11,4 @@ tmp
 *.sqlite
 *.log
 tsconfig.tsbuildinfo
-rpg_bot/data
-rpg_bot/logs
+providers.json

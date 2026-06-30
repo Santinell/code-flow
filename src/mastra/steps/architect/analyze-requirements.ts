@@ -26,6 +26,7 @@ export const analyzeRequirements = createStep({
   outputSchema: architectParseTasksOutputSchema,
   resumeSchema,
   suspendSchema,
+  retries: 3,
   execute: async ({ inputData, resumeData, suspend }) => {
     const { userId, chatId, threadId } = inputData;
     const userMessage = resumeData?.userMessage ?? inputData.userMessage;

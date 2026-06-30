@@ -37,7 +37,11 @@ pnpm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your API keys and tokens
+# Edit .env with your settings
+
+# Configure LLM providers
+cp providers-example.json providers.json
+# Edit providers.json with your provider API keys
 
 # Start the system (Telegram bot + Linear polling)
 pnpm start
@@ -51,19 +55,14 @@ pnpm trigger:poller      # Linear polling only (Developer + Reviewer)
 
 See `.env.example` for the full list. Main key variables:
 
-| Variable              | Description                                                   |
-| --------------------- | ------------------------------------------------------------- |
-| `AI_API_KEY`          | LLM provider API key                                          |
-| `AI_API_MODE`         | Provider mode: `openai`, `deepseek`, `anthropic`, or `ollama` |
-| `AI_API_BASE`         | URL base for AI requests                                      |
-| `TELEGRAM_BOT_TOKEN`  | Telegram bot token                                            |
-| `LINEAR_API_KEY`      | Linear API key                                                |
-| `LINEAR_TEAM_KEY`     | Linear team key for task creation                             |
-| `LINEAR_PROJECT_SLUG` | Linear project slug                                           |
-| `PROJECT_PATH`        | Path to target project                                        |
-| `WORKTREE_PATH`       | Path to worktrees (should be empty)                           |
-
-Also check \*\_MODEL variables
+| Variable              | Description                         |
+| --------------------- | ----------------------------------- |
+| `TELEGRAM_BOT_TOKEN`  | Telegram bot token                  |
+| `LINEAR_API_KEY`      | Linear API key                      |
+| `LINEAR_TEAM_KEY`     | Linear team key for task creation   |
+| `LINEAR_PROJECT_SLUG` | Linear project slug                 |
+| `PROJECT_PATH`        | Path to target project              |
+| `WORKTREE_PATH`       | Path to worktrees (should be empty) |
 
 ## Evaluation
 

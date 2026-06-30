@@ -4,14 +4,11 @@ import {
   getAssistantMessageFromRunOutput,
   ScorerRunOutputForLLMJudge,
 } from '@mastra/evals/scorers/utils';
-import { getEnv } from '../../../config/env.js';
 import { getWorktreeDiffSync } from '../../../integrations/git.js';
 import { getCurrentWorktreePath } from '../../../utils/worktree-context.js';
-import { getModel } from '../../model.js';
+import { getMainModel } from '../../model.js';
 
-const env = getEnv();
-
-export const judgeModel: LanguageModelV3 = getModel(env.JUDGE_MODEL);
+export const judgeModel: LanguageModelV3 = getMainModel('judge');
 
 export const judgeConfig: {
   model: LanguageModelV3;

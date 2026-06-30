@@ -3,10 +3,10 @@ import { Memory } from '@mastra/memory';
 import { getEnv } from '../../config/env.js';
 import { ARCHITECT_SYSTEM_PROMPT } from '../../config/prompts.js';
 import { architectScorers } from '../evals/scorers/index.js';
-import { getLocalEmbeddingModel, getModel } from '../model.js';
-import { storage, vector } from '../storage.js';
+import { getEmbeddingModel, getModel } from '../model.js';
 import { agentsMdProcessor } from '../processors/agents-md.js';
 import { ToolBudgetProcessor } from '../processors/tool-budget.js';
+import { storage, vector } from '../storage.js';
 import { fileReadTool, globSearchTool, listDirTool } from '../tools/index.js';
 
 const env = getEnv();
@@ -15,7 +15,7 @@ export const architectAgent = new Agent({
   id: 'architect-agent',
   name: 'architect',
   instructions: ARCHITECT_SYSTEM_PROMPT,
-  model: getModel(env.ARCHITECT_MODEL),
+  model: getModel('architect'),
   inputProcessors: [
     agentsMdProcessor,
     new ToolBudgetProcessor({
@@ -39,7 +39,7 @@ export const architectAgent = new Agent({
     },
     providerOptions: {
       openai: {
-        reasoningEffort: 'high'
+        reasoningEffort: 'high',
       },
       deepseek: {
         reasoningEffort: 'high',
@@ -55,7 +55,7 @@ function getMemory() {
     return new Memory({
       storage,
       vector,
-      embedder: getLocalEmbeddingModel(env.EMBEDDING_MODEL, env.EMBEDDING_MODEL_DIMENSIONS),
+      embedder: getEmbeddingModel('embedding'),
       options: {
         lastMessages: 30,
         semanticRecall: {

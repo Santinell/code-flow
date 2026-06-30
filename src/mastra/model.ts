@@ -1,4 +1,5 @@
 import type { EmbeddingModelV3, LanguageModelV3 } from '@ai-sdk/provider';
+import type { ModelWithRetries } from '@mastra/core/agent';
 import {
   type AnthropicProvider,
   type AnthropicProviderSettings,
@@ -11,7 +12,13 @@ import {
 } from '@ai-sdk/deepseek';
 import { createOpenAI, type OpenAIProviderSettings, type OpenAIProvider } from '@ai-sdk/openai';
 import { createOllama, OllamaProviderSettings } from 'ollama-ai-provider-v2';
-import { getEnv } from '../config/env.js';
+import {
+  getAgentMainEntry,
+  getAgentModelEntries,
+  getProviderConfig,
+  type ModelEntry,
+  type ProviderConfig,
+} from '../config/providers.js';
 
 let openaiProvider: OpenAIProvider | null = null;
 let deepseekProvider: DeepSeekProvider | null = null;
@@ -24,15 +31,12 @@ type getModelOptions =
   | Omit<OpenAIProviderSettings, 'apiKey' | 'baseURL'>
   | Omit<DeepSeekProviderSettings, 'apiKey' | 'baseURL'>;
 
-const env = getEnv();
-
-export function getModel(
+function createLanguageModel(
+  config: ProviderConfig,
   modelName: string,
-  options?: getModelOptions | undefined
+  options?: getModelOptions
 ): LanguageModelV3 {
-  const mode = env.AI_API_MODE;
-  const apiKey = env.AI_API_KEY;
-  const baseURL = env.AI_API_BASE;
+  const { mode, baseUrl: baseURL, apiKey } = config;
 
   switch (mode) {
     case 'openai': {
@@ -59,16 +63,58 @@ export function getModel(
       }
       return deepseekProvider.chat(modelName);
     }
+    default: {
+      throw new Error(`Unknown provider mode: ${mode}`);
+    }
   }
 }
 
-export function getLocalEmbeddingModel(
+function createEmbeddingModel(
+  config: ProviderConfig,
   modelName: string,
   dimensions: number,
   options?: getEmbeddingModelOptions
 ): EmbeddingModelV3 {
-  const baseURL = env.EMBEDDING_API_BASE;
-  const ollama = createOllama({ baseURL, ...options });
+  const { baseUrl: baseURL, apiKey, mode } = config;
 
-  return ollama.embedding(modelName, { dimensions });
+  switch (mode) {
+    case 'embedding-openai': {
+      if (!openaiProvider) {
+        openaiProvider = createOpenAI({ apiKey, baseURL, ...options });
+      }
+      return openaiProvider.embedding(modelName);
+    }
+    case 'embedding-ollama': {
+      const ollama = createOllama({ baseURL, ...options });
+      return ollama.embedding(modelName, { dimensions });
+    }
+    default: {
+      throw new Error(`Unknown embedding provider mode: ${mode}`);
+    }
+  }
+}
+
+function entryToModel(entry: ModelEntry): ModelWithRetries {
+  const providerConfig = getProviderConfig(entry.provider);
+  return {
+    id: `${entry.provider}/${entry.model}`,
+    model: createLanguageModel(providerConfig, entry.model),
+  };
+}
+
+export function getEmbeddingModel(agentName: string): EmbeddingModelV3 {
+  const entry = getAgentMainEntry(agentName);
+  const providerConfig = getProviderConfig(entry.provider);
+  return createEmbeddingModel(providerConfig, entry.model, entry.dimensions ?? 768);
+}
+
+export function getMainModel(agentName: string): LanguageModelV3 {
+  const entry = getAgentMainEntry(agentName);
+  const providerConfig = getProviderConfig(entry.provider);
+  return createLanguageModel(providerConfig, entry.model);
+}
+
+export function getModel(agentName: string): ModelWithRetries[] {
+  const entries = getAgentModelEntries(agentName);
+  return entries.map(entryToModel);
 }

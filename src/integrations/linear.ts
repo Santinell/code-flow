@@ -4,7 +4,7 @@ import { createLogger } from '../utils/logger.js';
 
 const env = getEnv();
 const log = createLogger('linear');
-const client  = new LinearClient({ apiKey: env.LINEAR_API_KEY });
+const client = new LinearClient({ apiKey: env.LINEAR_API_KEY });
 const projectId = await getProjectId();
 
 /** Resolve project slug to UUID. Linear API requires UUID for project.id.eq filter. */
@@ -166,6 +166,7 @@ export async function updateTaskStatus(taskId: string, status: string): Promise<
 }
 
 /** Add a comment to a task */
-export async function addComment(taskId: string, body: string): Promise<void> {  await client.createComment({ issueId: taskId, body });
+export async function addComment(taskId: string, body: string): Promise<void> {
+  await client.createComment({ issueId: taskId, body });
   log.info({ taskId }, 'Comment added to task');
 }

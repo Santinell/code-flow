@@ -20,7 +20,7 @@ export const developerAgent = new Agent({
   id: 'developer-agent',
   name: 'developer',
   instructions: DEVELOPER_SYSTEM_PROMPT,
-  model: getModel(env.DEVELOPER_MODEL),
+  model: getModel('developer'),
   inputProcessors: [
     agentsMdProcessor,
     new ToolBudgetProcessor({

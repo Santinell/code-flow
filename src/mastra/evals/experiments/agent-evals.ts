@@ -5,7 +5,7 @@ import { runReviewerAgentEvals } from './agents/reviewer-evals.js';
 
 export { runArchitectAgentEvals, runDeveloperAgentEvals, runReviewerAgentEvals };
 
-process.env.DB_PATH='./data/eval.db';
+process.env.DB_PATH = './data/eval.db';
 
 const cliArgs = process.argv.slice(2);
 const agentFlag = cliArgs.find((a) => a.startsWith('--agent='))?.split('=')[1];

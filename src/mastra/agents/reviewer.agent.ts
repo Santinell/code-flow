@@ -13,7 +13,7 @@ export const reviewerAgent = new Agent({
   id: 'reviewer-agent',
   name: 'reviewer',
   instructions: REVIEWER_SYSTEM_PROMPT,
-  model: getModel(env.REVIEWER_MODEL),
+  model: getModel('reviewer'),
   inputProcessors: [
     agentsMdProcessor,
     new ToolBudgetProcessor({

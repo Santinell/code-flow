@@ -1,0 +1,61 @@
+{
+  "providers": {
+    "deepseek": {
+      "mode": "deepseek",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKey": ""
+    },
+    "claude": {
+      "mode": "anthropic",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "apiKey": ""
+    },
+    "openai": {
+      "mode": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": ""
+    },
+    "ollama": {
+      "mode": "ollama",
+      "baseUrl": "http://localhost:11434"
+    },
+    "openai-embedding": {
+      "mode": "embedding-openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": ""
+    },
+    "ollama-embedding": {
+      "mode": "embedding-ollama",
+      "baseUrl": "http://localhost:11434"
+    }
+  },
+  "agents": {
+    "architect": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro",
+      "fallbacks": [
+        {
+          "provider": "claude",
+          "model": "claude-sonnet-4.6"
+        }
+      ]
+    },
+    "reviewer": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash"
+    },
+    "developer": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash"
+    },
+    "judge": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash"
+    },
+    "embedding": {
+      "provider": "ollama",
+      "model": "embeddinggemma",
+      "dimensions": 768
+    }
+  }
+}

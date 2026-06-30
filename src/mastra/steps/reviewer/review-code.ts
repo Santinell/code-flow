@@ -28,6 +28,7 @@ export const reviewCodeStep = createStep({
       sampling: { type: 'ratio', rate: 1 },
     },
   },
+  retries: 3,
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);
 

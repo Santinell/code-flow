@@ -4,18 +4,13 @@ import fs from 'fs';
 
 const pathExists = (path: string) => {
   return fs.existsSync(path);
-}
+};
 
 const gitExists = (path: string) => {
   return fs.existsSync(`${path}/.git`);
-}
+};
 
 const envSchema = z.object({
-  // LLM
-  AI_API_KEY: z.string().min(1),
-  AI_API_BASE: z.httpUrl().default('https://api.openai.com/v1'),
-  AI_API_MODE: z.enum(['openai', 'openai-responses', 'deepseek', 'anthropic']).default('openai'),
-
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().min(1),
 
@@ -30,11 +25,15 @@ const envSchema = z.object({
   LINEAR_STATUS_DONE: z.string().min(1),
 
   // Git
-  PROJECT_PATH: z.string().min(1).refine(pathExists, {
-    message: 'PROJECT_PATH does not exist',
-  }).refine(gitExists, {
-    message: 'PROJECT_PATH is not a git repository',
-  }),
+  PROJECT_PATH: z
+    .string()
+    .min(1)
+    .refine(pathExists, {
+      message: 'PROJECT_PATH does not exist',
+    })
+    .refine(gitExists, {
+      message: 'PROJECT_PATH is not a git repository',
+    }),
   WORKTREE_PATH: z.string().min(1).refine(pathExists, {
     message: 'WORKTREE_PATH does not exist',
   }),
@@ -48,17 +47,9 @@ const envSchema = z.object({
   MAX_CONCURRENT_DEVELOPER_TASKS: z.coerce.number().int().min(1).default(1),
   MAX_CONCURRENT_REVIEWER_TASKS: z.coerce.number().int().min(1).default(1),
   MAX_CONCURRENT_EVAL: z.coerce.number().int().min(1).default(1),
-  ARCHITECT_MODEL: z.string().default('deepseek-v4-pro'),
-  DEVELOPER_MODEL: z.string().default('deepseek-v4-flash'),
-  REVIEWER_MODEL: z.string().default('deepseek-v4-flash'),
-  // Eval
-  JUDGE_MODEL: z.string().default('deepseek-v4-flash'),
 
   // Embedding
   EMBEDDING_MEMORY: z.coerce.boolean().default(false),
-  EMBEDDING_API_BASE: z.url().default('http://localhost:11434/api'),
-  EMBEDDING_MODEL: z.string().default('embeddinggemma:latest'),
-  EMBEDDING_MODEL_DIMENSIONS: z.coerce.number().int().default(768),
 
   // Agent step budgets — used both for agent.generate() and in prompts
   MAX_STEPS_ANALYZE: z.coerce.number().int().min(15).default(15),
