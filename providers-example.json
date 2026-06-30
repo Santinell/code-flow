@@ -17,16 +17,16 @@
     },
     "ollama": {
       "mode": "ollama",
-      "baseUrl": "http://localhost:11434"
+      "baseUrl": "http://localhost:11434/api"
     },
-    "openai-embedding": {
+    "embedding-openai": {
       "mode": "embedding-openai",
       "baseUrl": "https://api.openai.com/v1",
       "apiKey": ""
     },
-    "ollama-embedding": {
+    "embedding-ollama": {
       "mode": "embedding-ollama",
-      "baseUrl": "http://localhost:11434"
+      "baseUrl": "http://localhost:11434/api"
     }
   },
   "agents": {
@@ -36,7 +36,7 @@
       "fallbacks": [
         {
           "provider": "claude",
-          "model": "claude-sonnet-4.6"
+          "model": "claude-sonnet-4-6"
         }
       ]
     },
@@ -53,7 +53,7 @@
       "model": "deepseek-v4-flash"
     },
     "embedding": {
-      "provider": "ollama",
+      "provider": "embedding-ollama",
       "model": "embeddinggemma",
       "dimensions": 768
     }

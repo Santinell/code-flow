@@ -11,7 +11,7 @@ import {
   type DeepSeekProvider,
 } from '@ai-sdk/deepseek';
 import { createOpenAI, type OpenAIProviderSettings, type OpenAIProvider } from '@ai-sdk/openai';
-import { createOllama, OllamaProviderSettings } from 'ollama-ai-provider-v2';
+import { createOllama, OllamaProvider, OllamaProviderSettings } from 'ollama-ai-provider-v2';
 import {
   getAgentMainEntry,
   getAgentModelEntries,
@@ -23,6 +23,7 @@ import {
 let openaiProvider: OpenAIProvider | null = null;
 let deepseekProvider: DeepSeekProvider | null = null;
 let anthropicProvider: AnthropicProvider | null = null;
+let ollamaProvider: OllamaProvider | null = null;
 
 type getEmbeddingModelOptions = Omit<OllamaProviderSettings, 'baseURL'>;
 
@@ -62,6 +63,12 @@ function createLanguageModel(
         deepseekProvider = createDeepSeek({ apiKey, baseURL, ...options });
       }
       return deepseekProvider.chat(modelName);
+    }
+    case 'ollama': {
+      if (!ollamaProvider) {
+        ollamaProvider = createOllama({ baseURL, ...options });
+      }
+      return ollamaProvider.chat(modelName);
     }
     default: {
       throw new Error(`Unknown provider mode: ${mode}`);
