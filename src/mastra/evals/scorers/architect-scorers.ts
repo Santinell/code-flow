@@ -5,13 +5,16 @@ import {
   ScorerRunOutputForAgent,
   type MastraScorers,
 } from '@mastra/core/evals';
-import {
-  createPromptAlignmentScorerLLM,
-  createToxicityScorer,
-} from '@mastra/evals/scorers/prebuilt';
+import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt';
+import { getUserMessageFromRunInput, roundToTwoDecimals } from '@mastra/evals/scorers/utils';
 import { z } from 'zod';
 import { ArchitectGenerateOutput } from '../../workflows/architect.workflow.types.js';
-import { enableJsonPromptInjection, judgeConfig, judgeModel } from './shared.js';
+import {
+  enableJsonPromptInjection,
+  getToolResultContexts,
+  judgeConfig,
+  judgeModel,
+} from './shared.js';
 
 // Store ground truth data indexed by input text for scorer access
 const groundTruthByInput = new Map<string, ArchitectDatasetItem['groundTruth']>();
@@ -35,7 +38,7 @@ function getResponse(output: ScorerRunOutputForAgent): ArchitectGenerateOutput {
 }
 
 function getInputText(input: ScorerRunInputForAgent | undefined): string {
-  return input?.inputMessages.join('\n') ?? '';
+  return getUserMessageFromRunInput(input) ?? '';
 }
 
 export const architectTaskValidityScorer = createScorer({
@@ -100,14 +103,25 @@ Tasks (${tasks.length}):
 ${tasksJson.slice(0, 2000)}
 
 Evaluate:
-1. If needsClarification is true: tasks must be empty [], message must contain clear clarifying questions (3-5, specific, relevant)
-2. If needsClarification is false: tasks must contain at least 1 task. Each task must have:
-   - title: clear, actionable, non-empty
-   - description: contains Summary, Context, Requirements, Acceptance Criteria sections (Markdown)
-   - priority: integer 0-4
 
-Assign messageQualityScore (0-1) and taskValidityScore (0-1).
-If needsClarification is true, taskValidityScore is 1 when tasks is empty, 0 otherwise.
+1. If needsClarification is true:
+   - tasks must be empty []
+   - messageQualityScore (0-1) based on the quality of clarifying questions:
+     * 0.85-1.0: 3+ specific, relevant questions that reference actual project files/paths from the codebase
+     * 0.65-0.84: 3+ relevant questions about specific technical choices, but no file references
+     * 0.40-0.64: 1-2 relevant but generic questions (e.g. "what library to use?")
+     * 0.15-0.39: one vague question or question partly irrelevant to the domain
+     * 0.00-0.14: no questions or completely irrelevant/noise
+   - taskValidityScore: 1.0 when tasks is empty (which is correct for clarification), 0 otherwise
+
+ 2. If needsClarification is false:
+    - tasks must contain at least 1 task
+    - Each task must have:
+      * title: clear, actionable, non-empty
+      * description: structured with clearly separated logical sections — can use English headings (Summary, Context, Requirements, Acceptance Criteria, Technical Notes) OR their Russian equivalents (Описание, Контекст, Требования, Критерии Приёмки, Технические замечания). The presence of a sectioned structure matters, not the language of headings.
+      * priority: integer 0-4
+    - messageQualityScore: quality and helpfulness of the architect's summary message
+    - taskValidityScore: fraction of tasks that satisfy all structural requirements
 
 Respond in JSON:
 {
@@ -249,6 +263,11 @@ export const architectResponseLanguageScorer = createScorer({
       return 1;
     }
 
+    if (!isNaturalLanguageText(input)) {
+      // Garbage/empty input has no real language to match — don't penalize the reply's language.
+      return 1;
+    }
+
     const inputHasCyrillic = /[а-яё]/i.test(input);
     const inputHasLatin = /[a-z]/i.test(input);
 
@@ -272,6 +291,21 @@ export const architectResponseLanguageScorer = createScorer({
     const inputLang = /[а-яё]/i.test(input) ? 'Russian' : 'English/other';
     return `Response language appears to differ from input language (expected: ${inputLang})`;
   });
+
+/**
+ * Heuristic: does this input look like real natural-language text, as opposed to
+ * garbage/keyboard-mash or empty input? Requires multiple words (whitespace-separated
+ * tokens) so a single random string of Latin letters (e.g. "asdfghjkl") isn't mistaken
+ * for "a request written in English".
+ */
+function isNaturalLanguageText(input: string): boolean {
+  const trimmed = input.trim();
+  if (trimmed.length < 3) {
+    return false;
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  return words.length >= 2;
+}
 
 export const architectTaskCountScorer = createScorer({
   id: 'architect-task-count',
@@ -315,29 +349,31 @@ export const architectTaskCountScorer = createScorer({
 
 // --- Built-in scorers ---
 
-const ARCHITECT_FAITHFULNESS_INSTRUCTIONS = `You are a precise faithfulness evaluator for an architect agent that decomposes user requirements into tasks.
+const ARCHITECT_FAITHFULNESS_INSTRUCTIONS = `You are a precise faithfulness evaluator for an architect agent that explores a codebase (via readFile/listDir/globSearch) and decomposes user requirements into tasks.
 
 Key Principles:
 1. Extract all claims from the architect's output (task titles, descriptions, features mentioned)
-2. Verify each claim against the user requirements provided in context
-3. Consider a claim truthful if it is explicitly mentioned or logically implied by the user requirements
-4. Consider a claim contradictory if it conflicts with the user requirements
-5. Consider a claim unsure if it adds features/details not mentioned in the requirements
-6. Focus on factual consistency with user requirements, not task quality
-7. Reasonable technical elaboration is acceptable (e.g., adding standard implementation details)
-8. Never use prior knowledge - only judge based on what's in the user requirements
+2. Verify each claim against BOTH the user requirement AND the codebase context the architect explored (provided together in context)
+3. Consider a claim truthful if it is explicitly mentioned or logically implied by the user requirement, OR grounded in the actual code/files the architect read
+4. Consider a claim contradictory if it conflicts with the user requirement or misrepresents the actual contents of the explored files
+5. Consider a claim unsure if it adds features/details not mentioned in the requirement and not supported by the explored codebase
+6. Focus on factual consistency with the requirement and the explored codebase, not task quality
+7. Reasonable technical elaboration is acceptable (e.g., adding standard implementation details, or referencing specific files/functions/exports the architect actually read)
+8. Never use prior knowledge - only judge based on what's in the user requirement or the explored codebase context
 
 **What is NOT a hallucination for architect:**
 - Adding standard technical implementation details (e.g., "create API endpoint" when user says "add feature")
 - Breaking down a feature into logical sub-components
 - Mentioning common best practices related to the requirement
 - Adding standard fields to tasks (priority, acceptance criteria structure)
+- Referencing specific files, functions, types, or exports that appear in the explored codebase context, even if not mentioned in the user's original message
 
 **What IS a hallucination:**
-- Inventing features not mentioned or implied by the user
+- Inventing features not mentioned or implied by the user, and not grounded in the explored codebase
 - Adding requirements the user didn't ask for
 - Changing the scope significantly
-- Making up specific technical choices not mentioned (e.g., specific libraries when none were mentioned)`;
+- Making up specific technical choices not mentioned and not present in the explored codebase (e.g., specific libraries when none were seen)
+- Misdescribing the actual contents of a file the architect read`;
 
 function createArchitectFaithfulnessExtractPrompt({ output }: { output: string }): string {
   return `Extract all factual claims about features, requirements, and implementation from the architect's task decomposition.
@@ -441,12 +477,20 @@ export const architectFaithfulnessScorer = enableJsonPromptInjection(
       createPrompt: ({ results, run }) => {
         const claims = results?.preprocessStepResult?.claims ?? [];
         const input = getInputText(run.input);
-        // Context is the user requirement itself
+        const toolContexts = getToolResultContexts(run.output);
+        // Context is the user requirement plus whatever the architect read from the codebase
         const context = [
           'User Requirement:',
           input,
           '',
-          'Note: The architect should decompose this requirement into actionable tasks. Reasonable technical elaboration is acceptable.',
+          ...(toolContexts.length > 0
+            ? [
+                'Codebase context explored by the architect (via readFile/listDir/globSearch):',
+                ...toolContexts,
+                '',
+              ]
+            : []),
+          'Note: The architect should decompose this requirement into actionable tasks. Reasonable technical elaboration and details grounded in the explored codebase are acceptable.',
         ];
         return createArchitectFaithfulnessAnalyzePrompt({ claims, context });
       },
@@ -583,14 +627,285 @@ Respond in JSON:
     return r.explanation;
   });
 
-export const architectPromptAlignmentScorer = enableJsonPromptInjection(
-  createPromptAlignmentScorerLLM({
+// --- Prompt Alignment Scorer (custom, handles structured output) ---
+//
+// createPromptAlignmentScorerLLM from @mastra/evals uses
+// getAssistantMessageFromRunOutput() which extracts text from raw assistant
+// messages. Architect responds via structuredOutput — the text part of the
+// assistant message is empty, so the built-in scorer throws:
+// "Agent response is required for prompt alignment scoring".
+//
+// This custom scorer extracts the response from output's structuredOutput
+// metadata instead, using the same getResponse() helper as other scorers.
+
+const ARCHITECT_PROMPT_ALIGNMENT_INSTRUCTIONS = `You are an expert prompt-response alignment evaluator. Your job is to analyze how well an architect agent's response aligns with the user's prompt in terms of intent, requirements, completeness, and appropriateness.
+
+Key Evaluation Dimensions:
+1. **Intent Alignment**: Does the response address the core purpose of the prompt?
+2. **Requirements Fulfillment**: Are all explicit and implicit requirements met?
+3. **Completeness**: Is the response comprehensive and thorough?
+4. **Response Appropriateness**: Does the format, tone, and style match expectations?
+
+Evaluation Guidelines:
+- Identify the primary intent and any secondary intents in the prompt
+- Extract all explicit requirements (specific tasks, constraints, formats)
+- Consider implicit requirements based on context and standard expectations
+- Assess whether the response fully addresses the prompt or leaves gaps
+- Evaluate if the response format and tone are appropriate for the request
+- Be objective and focus on alignment rather than response quality
+
+Score each dimension from 0.0 (completely misaligned) to 1.0 (perfectly aligned).`;
+
+function createArchitectAlignmentAnalyzePrompt({
+  userPrompt,
+  agentResponse,
+  needsClarification,
+}: {
+  userPrompt: string;
+  agentResponse: string;
+  needsClarification: boolean;
+}): string {
+  if (needsClarification) {
+    return `Analyze how well the architect agent's response aligns with the user's prompt. The architect determined that the prompt needs clarification before producing tasks — this response intentionally contains no tasks, only clarifying questions.
+
+User Prompt:
+${userPrompt}
+
+Agent Response:
+${agentResponse}
+
+Since this is a clarification response, evaluate:
+
+1. **Intent Alignment** (score 0-1):
+   - Did the architect correctly identify that the prompt is vague/ambiguous?
+   - Is requesting clarification the correct approach, or was the prompt clear enough for direct decomposition?
+   - Score 1.0 if clarification is clearly the right call, 0.0 if the prompt was detailed enough for tasks.
+   - Provide clear reasoning.
+
+2. **Requirements Fulfillment** (score 0-1):
+   - Do the clarifying questions address the specific gaps in the prompt?
+   - Are questions targeted, specific, and actionable?
+   - Do they reference relevant project/tech context (files, libraries, patterns)?
+   - Score 1.0 if questions cover all key ambiguities, 0.0 if they miss obvious gaps.
+   - List each question as a "requirement" and mark it as fulfilled if it's a well-formed clarifying question.
+
+3. **Completeness** (score 0-1):
+   - Does the set of questions comprehensively cover what's missing from the prompt?
+   - Are there 2-5 distinct, well-formed questions?
+   - Score 1.0 for comprehensive coverage, 0.0 for very few or shallow questions.
+
+4. **Response Appropriateness** (score 0-1):
+   - Is the tone helpful, professional, and collaborative?
+   - Is the format clear (numbered questions, logical ordering)?
+   - Score 1.0 for well-structured, respectful clarification, 0.0 for abrupt or confusing format.
+
+Format your response as:
+{
+  "intentAlignment": { "score": 0-1, "primaryIntent": "main purpose of prompt", "isAddressed": true/false, "reasoning": "..." },
+  "requirementsFulfillment": { "requirements": [{"requirement": "...", "isFulfilled": true/false, "reasoning": "..."}], "overallScore": 0-1 },
+  "completeness": { "score": 0-1, "missingElements": [...], "reasoning": "..." },
+  "responseAppropriateness": { "score": 0-1, "formatAlignment": true/false, "toneAlignment": true/false, "reasoning": "..." },
+  "overallAssessment": "summary of the prompt-response alignment"
+}`;
+  }
+
+  return `Analyze how well the architect agent's task decomposition aligns with the user's prompt across multiple dimensions.
+
+User Prompt:
+${userPrompt}
+
+Agent Response:
+${agentResponse}
+
+The architect produced task decomposition — evaluate:
+
+1. **Intent Alignment**:
+   - Identify the primary intent of the user's prompt
+   - Assess whether the task decomposition addresses this intent
+   - Score from 0.0 (completely misses intent) to 1.0 (perfectly addresses intent)
+   - Provide reasoning for your assessment
+
+2. **Requirements Fulfillment**:
+   - List all explicit requirements from the user prompt
+   - Check if each requirement is covered by at least one task
+   - Calculate an overall score based on fulfilled vs. total requirements
+   - Provide reasoning for each requirement assessment
+
+3. **Completeness**:
+   - Evaluate if the task set is comprehensive for the user's request
+   - Identify any missing tasks that should have been included
+   - Score from 0.0 (severely incomplete) to 1.0 (fully complete)
+   - Provide reasoning for your assessment
+
+4. **Response Appropriateness**:
+   - Check if tasks have proper structure (title, description with sections, priority)
+   - Evaluate if the tone is professional and technical
+   - Score from 0.0 (completely inappropriate) to 1.0 (perfectly appropriate)
+   - Provide reasoning for your assessment
+
+Format your response as:
+{
+  "intentAlignment": { "score": 0.0-1.0, "primaryIntent": "the main purpose of the prompt", "isAddressed": true/false, "reasoning": "explanation" },
+  "requirementsFulfillment": { "requirements": [{"requirement": "specific requirement from prompt", "isFulfilled": true/false, "reasoning": "explanation"}], "overallScore": 0.0-1.0 },
+  "completeness": { "score": 0.0-1.0, "missingElements": ["list of missing elements if any"], "reasoning": "explanation" },
+  "responseAppropriateness": { "score": 0.0-1.0, "formatAlignment": true/false, "toneAlignment": true/false, "reasoning": "explanation" },
+  "overallAssessment": "summary of the prompt-response alignment"
+}`;
+}
+
+const architectAlignmentAnalyzeSchema = z.object({
+  intentAlignment: z.object({
+    score: z.number().min(0).max(1),
+    primaryIntent: z.string(),
+    isAddressed: z.boolean().optional().default(true),
+    reasoning: z.string(),
+  }),
+  requirementsFulfillment: z.object({
+    requirements: z.array(
+      z.object({
+        requirement: z.string(),
+        isFulfilled: z.boolean(),
+        reasoning: z.string(),
+      })
+    ),
+    overallScore: z.number().min(0).max(1),
+  }),
+  completeness: z.object({
+    score: z.number().min(0).max(1),
+    missingElements: z.array(z.string()),
+    reasoning: z.string(),
+  }),
+  responseAppropriateness: z.object({
+    score: z.number().min(0).max(1),
+    formatAlignment: z.boolean(),
+    toneAlignment: z.boolean(),
+    reasoning: z.string(),
+  }),
+  overallAssessment: z.string(),
+});
+
+// User prompt alignment weights (same as built-in createPromptAlignmentScorerLLM USER mode)
+const USER_ALIGNMENT_WEIGHTS = {
+  INTENT_ALIGNMENT: 0.4,
+  REQUIREMENTS_FULFILLMENT: 0.3,
+  COMPLETENESS: 0.2,
+  RESPONSE_APPROPRIATENESS: 0.1,
+};
+
+export const architectPromptAlignmentScorer = createScorer({
+  id: 'architect-prompt-alignment',
+  name: 'Architect Prompt Alignment',
+  description:
+    'Evaluates how well the architect output aligns with the intent and requirements of the user prompt',
+  type: 'agent',
+  judge: {
     model: judgeModel,
-    options: {
-      evaluationMode: 'both',
+    instructions: ARCHITECT_PROMPT_ALIGNMENT_INSTRUCTIONS,
+    jsonPromptInjection: true,
+  },
+})
+  .preprocess(({ run }) => {
+    const userPrompt = getInputText(run.input);
+    const response = getResponse(run.output);
+    const agentResponse = response
+      ? JSON.stringify(
+          {
+            message: response.message,
+            needsClarification: response.needsClarification,
+            tasks: response.tasks,
+          },
+          null,
+          2
+        )
+      : '(no structured output)';
+
+    return {
+      userPrompt: userPrompt.slice(0, 3000),
+      agentResponse,
+      needsClarification: response?.needsClarification ?? false,
+    };
+  })
+  .analyze({
+    description: 'Analyze prompt-response alignment across multiple dimensions',
+    outputSchema: architectAlignmentAnalyzeSchema,
+    createPrompt: ({ results }) => {
+      const { userPrompt, agentResponse, needsClarification } = results.preprocessStepResult ?? {};
+      return createArchitectAlignmentAnalyzePrompt({
+        userPrompt: userPrompt ?? '',
+        agentResponse: agentResponse ?? '',
+        needsClarification: needsClarification ?? false,
+      });
     },
   })
-);
+  .generateScore(({ results }) => {
+    const analysis = results.analyzeStepResult;
+    if (!analysis) {
+      return 0;
+    }
+
+    const weightedScore =
+      analysis.intentAlignment.score * USER_ALIGNMENT_WEIGHTS.INTENT_ALIGNMENT +
+      analysis.requirementsFulfillment.overallScore *
+        USER_ALIGNMENT_WEIGHTS.REQUIREMENTS_FULFILLMENT +
+      analysis.completeness.score * USER_ALIGNMENT_WEIGHTS.COMPLETENESS +
+      analysis.responseAppropriateness.score * USER_ALIGNMENT_WEIGHTS.RESPONSE_APPROPRIATENESS;
+
+    return roundToTwoDecimals(weightedScore);
+  })
+  .generateReason({
+    description: 'Generate human-readable explanation of prompt alignment evaluation',
+    createPrompt: ({ run, results, score }) => {
+      const userPrompt = getInputText(run.input);
+      const analysis = results.analyzeStepResult;
+
+      if (!analysis) {
+        return `Unable to analyze prompt alignment. Score: ${score}`;
+      }
+
+      const fulfilledCount = analysis.requirementsFulfillment.requirements.filter(
+        (r) => r.isFulfilled
+      ).length;
+      const totalRequirements = analysis.requirementsFulfillment.requirements.length;
+
+      return `Explain the prompt alignment score based on how well the architect's task decomposition addresses the user's prompt.
+
+User Prompt:
+${userPrompt.slice(0, 2000)}
+
+Score: ${score} out of 1.0
+
+Evaluation Breakdown:
+- Intent Alignment (40% weight): ${analysis.intentAlignment.score}
+  Primary Intent: "${analysis.intentAlignment.primaryIntent}"
+  Addressed: ${analysis.intentAlignment.isAddressed ? 'Yes' : 'No'}
+  ${analysis.intentAlignment.reasoning}
+
+- Requirements Fulfillment (30% weight): ${analysis.requirementsFulfillment.overallScore}
+  ${fulfilledCount} out of ${totalRequirements} requirements met
+  ${analysis.requirementsFulfillment.requirements.map((r) => `  ${String.fromCharCode(8226)} ${r.requirement}: ${r.isFulfilled ? String.fromCharCode(10003) : String.fromCharCode(10007)}`).join('\n')}
+
+- Completeness (20% weight): ${analysis.completeness.score}
+  ${analysis.completeness.missingElements.length > 0 ? `Missing elements: ${analysis.completeness.missingElements.join(', ')}` : 'Response is complete'}
+  ${analysis.completeness.reasoning}
+
+- Response Appropriateness (10% weight): ${analysis.responseAppropriateness.score}
+  Format: ${analysis.responseAppropriateness.formatAlignment ? 'Aligned' : 'Misaligned'}
+  Tone: ${analysis.responseAppropriateness.toneAlignment ? 'Aligned' : 'Misaligned'}
+  ${analysis.responseAppropriateness.reasoning}
+
+Overall Assessment: ${analysis.overallAssessment}
+
+Rules for explanation:
+- Summarize the key strengths and weaknesses of alignment
+- Focus on how well the task decomposition meets the user's requirements
+- Be concise but specific (2-4 sentences)
+- Explain why the score is what it is
+- Use the given score, don't recalculate
+
+Format:
+"Explain the score (number) based on key findings."`;
+    },
+  });
 
 export const architectKeywordCoverageScorer = createScorer({
   id: 'architect-keyword-coverage',
@@ -605,12 +920,14 @@ export const architectKeywordCoverageScorer = createScorer({
       return 1;
     }
 
-    const outputText = JSON.stringify(response.tasks).toLowerCase();
+    // Search both tasks AND message (covers clarification responses where tasks is empty)
+    const outputText = (
+      JSON.stringify(response.tasks) + ' ' + (response.message ?? '')
+    ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 
     let coveredCount = 0;
     for (const keyword of requiredKeywords) {
-      // Check if keyword (or its substring) appears in output
       if (outputText.includes(keyword.toLowerCase())) {
         coveredCount++;
       }
@@ -626,7 +943,9 @@ export const architectKeywordCoverageScorer = createScorer({
     }
 
     const response = getResponse(run.output);
-    const outputText = JSON.stringify(response?.tasks).toLowerCase();
+    const outputText = (
+      JSON.stringify(response?.tasks) + ' ' + (response?.message ?? '')
+    ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 
     const covered: string[] = [];

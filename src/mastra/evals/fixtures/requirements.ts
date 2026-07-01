@@ -27,7 +27,7 @@ export const architectRequirements: ArchitectRequirementFixture[] = [
     id: 'dark-theme',
     category: 'complete',
     userMessage:
-      'Добавить тёмную тему в приложение. Нужна кнопка переключения в header, сохранение выбора в localStorage, поддержка CSS-переменных для цветов.',
+      'Добавить тёмную тему в приложение. Кнопка переключения должна быть в существующем компоненте Header (src/components/Header.tsx), цвета уже заданы через CSS-переменные в src/styles/theme.css. Нужно сохранять выбор темы в localStorage.',
     groundTruth: {
       needsClarification: false,
       minTasks: 2,
@@ -39,7 +39,7 @@ export const architectRequirements: ArchitectRequirementFixture[] = [
     id: 'pagination',
     category: 'complete',
     userMessage:
-      'Добавить пагинацию на страницу списка пользователей. API уже возвращает page, totalPages, items. Фронтенд должен отображать кнопки «Назад»/«Вперёд» и номера страниц.',
+      'Добавить пагинацию на страницу списка пользователей (src/pages/UsersList.tsx). API-роут src/routes/users.ts уже возвращает page, totalPages, items. Нужно отображать кнопки «Назад»/«Вперёд» и номера страниц над списком.',
     groundTruth: {
       needsClarification: false,
       minTasks: 1,
@@ -51,7 +51,7 @@ export const architectRequirements: ArchitectRequirementFixture[] = [
     id: 'email-notifications',
     category: 'complete',
     userMessage:
-      'Настроить отправку email-уведомлений при смене статуса задачи. Использовать существующий SMTP-сервис. Письмо должно содержать заголовок задачи, старый и новый статус, ссылку на задачу.',
+      'Настроить отправку email-уведомлений при смене статуса задачи. Задачи обновляются через src/services/tasks.ts (updateTaskStatus — уже возвращает task и previousStatus), для отправки писем использовать существующий src/services/smtp.ts (sendEmail). Письмо должно содержать заголовок задачи, старый и новый статус, ссылку на задачу.',
     groundTruth: {
       needsClarification: false,
       minTasks: 1,
@@ -89,7 +89,7 @@ export const architectRequirements: ArchitectRequirementFixture[] = [
     id: 'full-auth-system',
     category: 'ambitious',
     userMessage:
-      'Реализовать полную систему аутентификации: регистрация, вход, восстановление пароля, OAuth через Google и GitHub, роли (admin/user), JWT-токены с refresh, middleware для проверки прав.',
+      'Реализовать полную систему аутентификации на базе Express-приложения из src/server.ts. Сейчас src/auth/session.ts — это заглушка (getSession/requireAuth без верификации токена, без выдачи токенов, без хранения паролей). Нужно: регистрация, вход, восстановление пароля, OAuth через Google и GitHub, роли (admin/user, уже есть тип Role), JWT-токены с refresh, middleware для проверки прав (расширить requireAuth).',
     groundTruth: {
       needsClarification: false,
       minTasks: 5,
@@ -101,7 +101,7 @@ export const architectRequirements: ArchitectRequirementFixture[] = [
     id: 'dashboard-analytics',
     category: 'ambitious',
     userMessage:
-      'Создать дашборд аналитики: графики посещаемости, воронка конверсии, retention-отчёт, экспорт в CSV, фильтры по дате и источнику трафика, real-time обновление через WebSocket.',
+      'Наполнить страницу дашборда (src/pages/Dashboard.tsx, сейчас это пустой каркас) аналитикой: графики посещаемости, воронка конверсии, retention-отчёт, экспорт в CSV, фильтры по дате и источнику трафика, real-time обновление через WebSocket.',
     groundTruth: {
       needsClarification: false,
       minTasks: 5,
