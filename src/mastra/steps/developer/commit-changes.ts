@@ -15,11 +15,7 @@ export const commitChangesStep = createStep({
   inputSchema: developerCommitInputSchema,
   outputSchema: developerCommitOutputSchema,
   execute: async ({ inputData }) => {
-    const taskInput = parseDeveloperCommitInput(inputData) as {
-      taskIdentifier: string;
-      taskTitle: string;
-      branchName: string;
-    };
+    const taskInput = parseDeveloperCommitInput(inputData);
     const worktreePath = getWorktreePath(taskInput.branchName);
 
     const commitHash = await runInWorktree(worktreePath, async () => {

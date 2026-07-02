@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "import"],
+  "plugins": ["typescript", "import", "unicorn"],
   "categories": {
     "correctness": "error"
   },
@@ -140,7 +140,8 @@
     "radix": "error",
     "no-alert": "error",
     "no-template-curly-in-string": "error",
-    "no-accumulating-spread": "error"
+    "no-accumulating-spread": "error",
+    "unicorn/prefer-node-protocol": "error"
   },
   "globals": {
     "__dirname": "readonly",

@@ -10,7 +10,7 @@ import {
   type ScorerRunOutputForLLMJudge,
 } from '@mastra/evals/scorers/utils';
 import { z } from 'zod';
-import path from 'path';
+import path from 'node:path';
 import { getCurrentWorktreePath } from '../../../utils/worktree-context.js';
 import {
   fileDeleteTool,

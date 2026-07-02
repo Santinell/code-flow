@@ -1,6 +1,6 @@
 import { execa } from 'execa';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export function detectPackageManager(projectRoot: string): string | null {
   const indicators: Array<{ file: string; manager: string }> = [

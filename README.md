@@ -25,7 +25,7 @@ Automated agentic development system built on the [Mastra](https://mastra.ai) AI
 - **Tool Budgeting** — configurable step limits and per-tool usage budgets prevent runaway agent loops
 - **Auto Test Detection** — automatically detects the package manager (`pnpm`, `npm`, `yarn`, `bun`, `make`) and runs the test suite
 - **AGENTS.md Injection** — project-specific instructions from `AGENTS.md` are injected as system context for all agents
-- **Multi-Provider LLM Support** — OpenAI, DeepSeek, Anthropic, and Ollama (embeddings)
+- **Multi-Provider LLM Support** — OpenAI, DeepSeek, Anthropic, and Ollama
 - **Concurrency Control** — configurable limits for simultaneous Developer and Reviewer tasks
 - **Comprehensive Eval System** — 60+ scorers across agents, workflow steps, and trajectories with CI integration
 

@@ -1,12 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
 import {
-  developerNoFixOutputSchema,
+  developerFixStepOutputSchema,
   developerRunTestsOutputSchema,
 } from '../../workflows/developer.workflow.types.js';
 
 export const skipFixStep = createStep({
   id: 'skip-fix',
   inputSchema: developerRunTestsOutputSchema,
-  outputSchema: developerNoFixOutputSchema,
-  execute: async ({ inputData }) => ({ ...inputData, fixSkipped: true as const }),
+  outputSchema: developerFixStepOutputSchema,
+  execute: async ({ inputData }) => ({ ...inputData, fixResult: '', fixSkipped: true as const }),
 });

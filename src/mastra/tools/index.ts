@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
+import fg from 'fast-glob';
 import { z } from 'zod';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { runProjectTests } from '../../utils/exec.js';
 import { createLogger } from '../../utils/logger.js';
 import { validatePath } from '../../utils/path-security.js';
@@ -170,6 +171,7 @@ Returns relative file paths sorted alphabetically. Use this instead of "find" â€
   inputSchema: z.object({
     pattern: z
       .string()
+      .max(500, 'Pattern too long â€” maximum 500 characters')
       .describe('Glob pattern relative to project root (e.g. "src/**/*.ts", "tests/**/*.test.ts")'),
   }),
   execute: async (inputData) => {
@@ -179,58 +181,16 @@ Returns relative file paths sorted alphabetically. Use this instead of "find" â€
     }
 
     const root = validation.resolvedPath;
-    const results: string[] = [];
 
-    async function walk(dir: string, segments: string[], segmentIdx: number) {
-      if (segmentIdx >= segments.length) {
-        if (fs.existsSync(dir)) {
-          const rel = path.relative(root, dir);
-          results.push(rel);
-        }
-        return;
-      }
+    const files = await fg(inputData.pattern, {
+      cwd: root,
+      onlyFiles: true,
+      ignore: ['**/node_modules/**', '**/.git/**'],
+      absolute: false,
+      unique: true,
+    });
 
-      const seg = segments[segmentIdx];
-
-      if (seg === '**') {
-        // ** matches zero or more directories
-        // First, try matching zero directories (skip **)
-        await walk(dir, segments, segmentIdx + 1);
-
-        // Then recurse into subdirectories
-        if (fs.existsSync(dir)) {
-          const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-          for (const e of entries) {
-            if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') {
-              const sub = path.join(dir, e.name);
-              await walk(sub, segments, segmentIdx); // ** consumes this directory
-            }
-          }
-        }
-      } else if (seg.includes('*')) {
-        // Pattern segment (e.g. "*.ts", "foo-*.js")
-        const regex = new RegExp('^' + seg.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
-
-        if (fs.existsSync(dir)) {
-          const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-          for (const e of entries) {
-            if (regex.test(e.name)) {
-              await walk(path.join(dir, e.name), segments, segmentIdx + 1);
-            }
-          }
-        }
-      } else {
-        // Literal segment
-        const next = path.join(dir, seg);
-        await walk(next, segments, segmentIdx + 1);
-      }
-    }
-
-    // Split pattern into path segments
-    const patternParts = inputData.pattern.replace(/\\/g, '/').split('/').filter(Boolean);
-    await walk(root, patternParts, 0);
-
-    results.sort();
+    const results = files.sort();
     log.info({ pattern: inputData.pattern, count: results.length }, 'Glob search complete');
     return { files: results, pattern: inputData.pattern };
   },

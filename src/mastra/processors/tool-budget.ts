@@ -5,8 +5,8 @@ import type {
   ProcessInputStepResult,
   Processor,
 } from '@mastra/core/processors';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getCurrentWorktreePath } from '../../utils/worktree-context.js';
 
 type JsonPrimitive = string | number | boolean | null;

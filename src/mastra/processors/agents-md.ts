@@ -1,6 +1,6 @@
 import type { ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { getCurrentWorktreePath } from '../../utils/worktree-context.js';
 
 const cachedContentByPath = new Map<string, string | null>();

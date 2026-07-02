@@ -1,7 +1,7 @@
 import { execaSync } from 'execa';
 import { CleanOptions, SimpleGit, simpleGit } from 'simple-git';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { getEnv } from '../config/env.js';
 import { createLogger } from '../utils/logger.js';
 import { getCurrentWorktreePath, getWorktreePath } from '../utils/worktree-context.js';

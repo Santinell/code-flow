@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
-import fs from 'fs';
+import fs from 'node:fs';
 
 const pathExists = (path: string) => {
   return fs.existsSync(path);

@@ -5,7 +5,7 @@ import { createLogger } from '../../../utils/logger.js';
 import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
 import { developerAgent } from '../../agents/developer.agent.js';
 import {
-  developerFixTestFailuresOutputSchema,
+  developerFixStepOutputSchema,
   developerRunTestsOutputSchema,
 } from '../../workflows/developer.workflow.types.js';
 
@@ -31,7 +31,7 @@ Testing is handled by a separate workflow step — do not try to run tests.
 export const fixTestFailuresStep = createStep({
   id: 'fix-test-failures',
   inputSchema: developerRunTestsOutputSchema,
-  outputSchema: developerFixTestFailuresOutputSchema,
+  outputSchema: developerFixStepOutputSchema,
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);
 
@@ -67,6 +67,6 @@ Fix the failures now. Read the failing files, edit them with writeFile, and re-r
     stepLog.logStepComplete(inputData.taskIdentifier);
     log.info({ taskIdentifier: inputData.taskIdentifier }, 'Test fix attempt complete');
 
-    return { ...inputData, fixResult: result.text ?? '' };
+    return { ...inputData, fixResult: result.text ?? '', fixSkipped: false };
   },
 });

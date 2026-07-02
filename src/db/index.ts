@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
-import path from 'path';
+import path from 'node:path';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('db');
 
-import fs from 'fs';
+import fs from 'node:fs';
 
 let db: Database.Database | null = null;
 
@@ -83,8 +83,10 @@ export function getTaskBranch(taskId: string): string | null {
 export function getBranchByIdentifier(identifier: string): string | null {
   const db = getDb();
   const row = db
-    .prepare('SELECT branch_name FROM task_branches WHERE task_identifier = ?')
-    .get(identifier) as { branch_name: string } | undefined;
+    .prepare<string, { branch_name: string }>(
+      'SELECT branch_name FROM task_branches WHERE task_identifier = ?'
+    )
+    .get(identifier);
   return row?.branch_name ?? null;
 }
 
@@ -119,9 +121,11 @@ export function saveWorkflowRun(runId: string, data: WorkflowRunData): void {
 export function countActiveRunsByType(workflowType: string): number {
   const db = getDb();
   const row = db
-    .prepare('SELECT COUNT(*) AS count FROM user_workflows WHERE workflow_type = ?')
-    .get(workflowType) as { count: number };
-  return row.count;
+    .prepare<string, { count: number }>(
+      'SELECT COUNT(*) AS count FROM user_workflows WHERE workflow_type = ?'
+    )
+    .get(workflowType);
+  return row?.count ?? 0;
 }
 
 export function getActiveRunByUser(
@@ -129,18 +133,20 @@ export function getActiveRunByUser(
 ): { runId: string; threadId: string | null } | null {
   const db = getDb();
   const row = db
-    .prepare(
+    .prepare<number, { run_id: string; thread_id: string | null }>(
       'SELECT run_id, thread_id FROM user_workflows WHERE user_id = ? ORDER BY rowid DESC LIMIT 1'
     )
-    .get(userId) as { run_id: string; thread_id: string | null } | undefined;
+    .get(userId);
   return row ? { runId: row.run_id, threadId: row.thread_id } : null;
 }
 
 export function getActiveRunByTask(taskId: string): { runId: string } | null {
   const db = getDb();
   const row = db
-    .prepare('SELECT run_id FROM user_workflows WHERE task_id = ? LIMIT 1')
-    .get(taskId) as { run_id: string } | undefined;
+    .prepare<string, { run_id: string }>(
+      'SELECT run_id FROM user_workflows WHERE task_id = ? LIMIT 1'
+    )
+    .get(taskId);
   return row ? { runId: row.run_id } : null;
 }
 

@@ -922,7 +922,9 @@ export const architectKeywordCoverageScorer = createScorer({
 
     // Search both tasks AND message (covers clarification responses where tasks is empty)
     const outputText = (
-      JSON.stringify(response.tasks) + ' ' + (response.message ?? '')
+      JSON.stringify(response.tasks) +
+      ' ' +
+      (response.message ?? '')
     ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 
@@ -944,7 +946,9 @@ export const architectKeywordCoverageScorer = createScorer({
 
     const response = getResponse(run.output);
     const outputText = (
-      JSON.stringify(response?.tasks) + ' ' + (response?.message ?? '')
+      JSON.stringify(response?.tasks) +
+      ' ' +
+      (response?.message ?? '')
     ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 

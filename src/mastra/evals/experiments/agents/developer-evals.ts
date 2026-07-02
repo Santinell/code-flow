@@ -1,8 +1,8 @@
 import { runEvals } from '@mastra/core/evals';
 import { execa } from 'execa';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { getEnv } from '../../../../config/env.js';
 import {
   cleanForce,
