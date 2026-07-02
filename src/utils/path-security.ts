@@ -15,13 +15,19 @@ const log = createLogger('path-security');
  * 3. Проверка префикса — путь должен начинаться с WORKTREE_PATH
  */
 
-// Директории/файлы, которые нельзя удалять даже внутри проекта
+// Директории/файлы, которые нельзя читать/писать/удалять внутри проекта.
+// .env.example намеренно НЕ включён — это публичный шаблон.
 const PROTECTED_ENTRIES = new Set([
   '.git',
   '.env',
   '.env.local',
   '.env.production',
   '.env.development',
+  '.env.staging',
+  '.env.test',
+  '.ssh',
+  'id_rsa',
+  '.npmrc',
 ]);
 
 export interface PathValidationResult {
@@ -93,17 +99,28 @@ export function validatePath(
     }
   }
 
-  // 6. Проверка protected entries (только для delete)
-  if (operation === 'delete') {
-    const topSegment = relative.split(path.sep)[0];
-    if (PROTECTED_ENTRIES.has(topSegment)) {
-      return {
-        allowed: false,
-        reason: `Cannot delete "${topSegment}" — this directory/file is protected.`,
-        resolvedPath: resolved,
-        relativePath: relative,
-      };
-    }
+  // 6. Проверка protected entries для всех операций (read/write/delete).
+  //    Проверяем и верхний сегмент (ловит .git/..., .ssh/...), и basename
+  //    на любой глубине (ловит subdir/.env, config/id_rsa, nested/.npmrc).
+  const segments = relative.split(path.sep);
+  const topSegment = segments[0];
+  const baseSegment = path.basename(relative);
+  const protectedName = PROTECTED_ENTRIES.has(topSegment)
+    ? topSegment
+    : PROTECTED_ENTRIES.has(baseSegment)
+      ? baseSegment
+      : null;
+  if (protectedName) {
+    log.warn(
+      { agentPath, operation, protectedName, resolved, projectRoot: normalizedRoot },
+      'Access to protected entry blocked'
+    );
+    return {
+      allowed: false,
+      reason: `Cannot ${operation} "${protectedName}" — this directory/file is protected.`,
+      resolvedPath: resolved,
+      relativePath: relative,
+    };
   }
 
   return {

@@ -56,7 +56,11 @@ export const analyzeRequirements = createStep({
       userId,
       chatId,
       threadId,
-      tasks: output.tasks,
+      tasks: output.tasks.map(task => ({
+        title: task.title,
+        description: task.description,
+        priority: task.priority ?? 3,
+      })),
       parseError: false as const,
     };
   },

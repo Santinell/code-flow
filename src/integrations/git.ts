@@ -80,7 +80,8 @@ export function getWorktreeDiffSync(worktreePath: string): string {
     });
 
     return result.stdout.trim();
-  } catch {
+  } catch (error) {
+    log.warn({ worktreePath, error }, 'Failed to compute worktree diff');
     return '';
   }
 }
@@ -119,7 +120,9 @@ async function branchExistsLocal(git: SimpleGit, branchName: string): Promise<bo
   try {
     await git.revparse(['--verify', `refs/heads/${branchName}`]);
     return true;
-  } catch {
+  } catch (error) {
+    // revparse fails when the branch doesn't exist — expected control flow
+    log.debug({ branchName, error }, 'Branch does not exist (revparse failed)');
     return false;
   }
 }
@@ -128,7 +131,9 @@ async function worktreeExistsAt(git: SimpleGit, worktreePath: string): Promise<b
   try {
     const list = await git.raw(['worktree', 'list']);
     return list.includes(worktreePath);
-  } catch {
+  } catch (error) {
+    // worktree list may fail on freshly init'd repos — expected control flow
+    log.debug({ worktreePath, error }, 'Could not list worktrees');
     return false;
   }
 }

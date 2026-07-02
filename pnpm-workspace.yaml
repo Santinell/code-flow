@@ -2,3 +2,10 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   protobufjs: true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/anthropic@4.0.6'
+  - '@ai-sdk/deepseek@3.0.4'
+  - '@ai-sdk/openai@4.0.6'
+  - '@ai-sdk/provider-utils@5.0.4'
+  - '@linear/sdk@88.0.0'
+  - tsx@4.22.5

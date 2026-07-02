@@ -74,6 +74,8 @@ export const createLinearTasksStep = createStep({
       chatId: inputData.chatId,
       status: 'completed' as const,
       created,
+      rawOutput: '',
+      error: '',
     };
   },
 });
