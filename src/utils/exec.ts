@@ -79,3 +79,59 @@ export async function runProjectTests(
     manager,
   };
 }
+
+/**
+ * Восстанавливает зависимости в проекте через обнаруженный пакетный менеджер.
+ * Использует тот же detectPackageManager(), что и runProjectTests().
+ *
+ * Для проектов на Make (только Makefile, без lock-файла) — не запускается:
+ * такие проекты сами управляют своими зависимостями через make-таргеты.
+ */
+export async function installProjectDependencies(
+  cwd: string,
+  timeout = 300_000
+): Promise<{
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  passed: boolean;
+  skipped: boolean;
+  command: string;
+  manager: string | null;
+}> {
+  const manager = detectPackageManager(cwd);
+  if (!manager) {
+    return {
+      stdout: '',
+      stderr: 'No package manager detected — no lock file or Makefile found',
+      exitCode: 1,
+      passed: false,
+      skipped: false,
+      command: 'unknown',
+      manager: null,
+    };
+  }
+
+  // Make-проекты управляют зависимостями сами — install-таргет не универсален.
+  if (manager === 'make') {
+    return {
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      passed: true,
+      skipped: true,
+      command: 'make (skipped)',
+      manager,
+    };
+  }
+
+  const args = ['install'];
+  const result = await execInDir(manager, args, cwd, timeout);
+  return {
+    ...result,
+    passed: result.exitCode === 0,
+    skipped: false,
+    command: `${manager} ${args.join(' ')}`,
+    manager,
+  };
+}

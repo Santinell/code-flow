@@ -6,7 +6,7 @@ import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.
 import { developerAgent } from '../../agents/developer.agent.js';
 import {
   developerAnalysisOutputSchema,
-  developerBranchOutputSchema,
+  developerInstallDepsOutputSchema,
 } from '../../workflows/developer.workflow.types.js';
 
 const env = getEnv();
@@ -29,7 +29,7 @@ Output 2-4 sentences with concrete facts. Example format:
 
 export const analyzeCodebaseStep = createStep({
   id: 'analyze-codebase',
-  inputSchema: developerBranchOutputSchema,
+  inputSchema: developerInstallDepsOutputSchema,
   outputSchema: developerAnalysisOutputSchema,
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);

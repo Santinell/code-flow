@@ -8,7 +8,8 @@ vi.mock('execa', () => ({
   execa: (...args: [string, string[], Record<string, string>]) => mockExeca(...args),
 }));
 
-const { detectPackageManager, runProjectTests } = await import('./exec.js');
+const { detectPackageManager, installProjectDependencies, runProjectTests } =
+  await import('./exec.js');
 
 describe('detectPackageManager', () => {
   let tmpDir: string;
@@ -176,6 +177,122 @@ describe('runProjectTests', () => {
       'bun',
       ['test'],
       expect.objectContaining({ timeout: 5000 })
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe('installProjectDependencies', () => {
+  const projectRoot = '/tmp/__cf_test_project__';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns failure when no package manager detected', async () => {
+    const result = await installProjectDependencies(projectRoot);
+    expect(result.passed).toBe(false);
+    expect(result.skipped).toBe(false);
+    expect(result.manager).toBeNull();
+    expect(result.stderr).toContain('No package manager detected');
+    expect(result.command).toBe('unknown');
+    expect(mockExeca).not.toHaveBeenCalled();
+  });
+
+  it('skips for make-managed projects', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'Makefile'), '');
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(result.skipped).toBe(true);
+    expect(result.passed).toBe(true);
+    expect(result.manager).toBe('make');
+    expect(result.command).toBe('make (skipped)');
+    expect(mockExeca).not.toHaveBeenCalled();
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs pnpm install when pnpm-lock.yaml exists', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+
+    mockExeca.mockResolvedValue({
+      stdout: 'Progress: resolved 100, reused 100',
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'pnpm',
+      ['install'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.passed).toBe(true);
+    expect(result.skipped).toBe(false);
+    expect(result.command).toBe('pnpm install');
+    expect(result.manager).toBe('pnpm');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs npm install when package-lock.json exists', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '');
+
+    mockExeca.mockResolvedValue({
+      stdout: 'added 42 packages',
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'npm',
+      ['install'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.passed).toBe(true);
+    expect(result.command).toBe('npm install');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('passes exit code through when install fails', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
+
+    mockExeca.mockResolvedValue({
+      stdout: '',
+      stderr: 'ETARGET: no matching version',
+      exitCode: 1,
+    });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(result.passed).toBe(false);
+    expect(result.command).toBe('yarn install');
+    expect(result.exitCode).toBe(1);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('passes custom timeout to execa', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
+
+    mockExeca.mockResolvedValue({
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+    });
+
+    await installProjectDependencies(tmpDir, 10_000);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'bun',
+      ['install'],
+      expect.objectContaining({ timeout: 10_000 })
     );
 
     fs.rmSync(tmpDir, { recursive: true, force: true });

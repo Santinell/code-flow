@@ -16,35 +16,22 @@ export const runTestsStep = createStep({
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);
 
-    const result = await runInWorktree(worktreePath, async () => {
-      const r = await runProjectTests(worktreePath);
-
-      return {
-        testResult: {
-          stdout: r.stdout,
-          stderr: r.stderr,
-          exitCode: r.exitCode,
-        },
-        usedCommand: r.command,
-      };
-    });
+    const testResult = await runInWorktree(worktreePath, async () =>
+      runProjectTests(worktreePath)
+    );
 
     log.info(
       {
         taskIdentifier: inputData.taskIdentifier,
-        command: result.usedCommand,
-        exitCode: result.testResult.exitCode,
+        command: testResult.command,
+        exitCode: testResult.exitCode,
       },
       'Tests executed'
     );
 
     return {
       ...inputData,
-      testResult: {
-        command: result.usedCommand,
-        ...result.testResult,
-        passed: result.testResult.exitCode === 0,
-      },
+      testResult,
     };
   },
 });

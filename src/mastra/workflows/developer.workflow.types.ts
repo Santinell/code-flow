@@ -20,7 +20,19 @@ export const developerBranchOutputSchema = developerClaimTaskOutputSchema.extend
   branchCreated: z.boolean(),
 });
 
-export const developerAnalysisOutputSchema = developerBranchOutputSchema.extend({
+export const developerInstallDepsOutputSchema = developerBranchOutputSchema.extend({
+  installResult: z.object({
+    command: z.string(),
+    stdout: z.string(),
+    stderr: z.string(),
+    exitCode: z.number().int(),
+    passed: z.boolean(),
+    skipped: z.boolean(),
+    manager: z.string().nullable(),
+  }),
+});
+
+export const developerAnalysisOutputSchema = developerInstallDepsOutputSchema.extend({
   codebaseAnalysis: z.string(),
 });
 
@@ -35,6 +47,7 @@ export const developerRunTestsOutputSchema = developerImplementationOutputSchema
     stderr: z.string(),
     exitCode: z.number().int(),
     passed: z.boolean(),
+    manager: z.string().nullable(),
   }),
 });
 
@@ -64,6 +77,7 @@ export type DeveloperCommitInput = z.infer<typeof developerCommitInputSchema>;
 export type DeveloperWorkflowInput = z.infer<typeof developerWorkflowInputSchema>;
 export type DeveloperClaimTaskOutput = z.infer<typeof developerClaimTaskOutputSchema>;
 export type DeveloperBranchOutput = z.infer<typeof developerBranchOutputSchema>;
+export type DeveloperInstallDepsOutput = z.infer<typeof developerInstallDepsOutputSchema>;
 export type DeveloperAnalysisOutput = z.infer<typeof developerAnalysisOutputSchema>;
 export type DeveloperImplementationOutput = z.infer<typeof developerImplementationOutputSchema>;
 export type DeveloperRunTestsOutput = z.infer<typeof developerRunTestsOutputSchema>;
