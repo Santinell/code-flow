@@ -12,6 +12,7 @@ import {
   fileMoveTool,
   listDirTool,
   globSearchTool,
+  installDepsTool,
 } from '../tools/index.js';
 
 const env = getEnv();
@@ -29,6 +30,7 @@ export const developerAgent = new Agent({
         listDir: 1,
         globSearch: 2,
         readFile: 5,
+        installDeps: 1,
       },
       disableAfterWrite: ['listDir', 'globSearch', 'readFile'],
     }),
@@ -40,9 +42,13 @@ export const developerAgent = new Agent({
     moveFile: fileMoveTool,
     listDir: listDirTool,
     globSearch: globSearchTool,
+    installDeps: installDepsTool,
   },
   defaultOptions: {
     maxSteps: env.MAX_STEPS_AGENT_DEVELOPER,
+    modelSettings: {
+      maxOutputTokens: env.MAX_OUTPUT_TOKENS_DEVELOPER,
+    },
   },
   scorers: developerScorers,
 });

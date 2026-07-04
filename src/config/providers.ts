@@ -5,6 +5,7 @@ const providerModeSchema = z.enum([
   'openai',
   'openai-responses',
   'deepseek',
+  'z-ai',
   'anthropic',
   'ollama',
   'embedding-openai',

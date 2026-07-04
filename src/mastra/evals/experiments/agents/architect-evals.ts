@@ -1,3 +1,4 @@
+import type { EvalLanguage } from './developer-evals.js';
 import { runEvals } from '@mastra/core/evals';
 import { execa } from 'execa';
 import fs from 'node:fs';
@@ -10,43 +11,77 @@ import {
   initGitRepo,
   stageAllFiles,
 } from '../../../../integrations/git.js';
+import { installProjectDependencies } from '../../../../utils/exec.js';
 import { createLogger } from '../../../../utils/logger.js';
-import { runInWorktree } from '../../../../utils/worktree-context.js';
 import { architectAgent } from '../../../agents/architect.agent.js';
 import { architectGenerateOutputSchema } from '../../../workflows/architect.workflow.types.js';
-import { architectDataset } from '../../datasets/architect.dataset.js';
+import {
+  architectNodejsDataset,
+  architectPythonDataset,
+  type ArchitectDatasetItem,
+} from '../../datasets/architect.dataset.js';
 import { architectScorers, setGroundTruthData } from '../../scorers/index.js';
-import { withGenerateRetry } from '../../utils/retry-agent.js';
+import { createTokenUsageTracker } from '../../utils/token-usage.js';
+import { wrapAgent } from '../../utils/wrap-agent.js';
 
 export const log = createLogger('architect-eval');
 export const env = getEnv();
 export const ARCHITECT_SANDBOX_PREFIX = 'architect-sandbox-';
 
-async function setupEvalWorktree(): Promise<string> {
-  const fixturePath = path.join(import.meta.dirname, '../../../../../eval-fixtures/project');
-  const sandboxPath = path.join(os.tmpdir(), `${ARCHITECT_SANDBOX_PREFIX}${Date.now()}`);
+interface ArchitectLanguageConfig {
+  /** Имя поддиректории в eval-fixtures/ */
+  fixtureDir: string;
+  /** Патч-файл, добавляющий веб-структуру (компоненты/роуты/сервисы) */
+  patchFile: string;
+  /** Датасет требований для этого языка */
+  dataset: ArchitectDatasetItem[];
+}
 
-  log.info({ fixturePath, sandboxPath }, 'Creating eval sandbox from fixture');
+const LANGUAGE_CONFIGS: Record<EvalLanguage, ArchitectLanguageConfig> = {
+  node: {
+    fixtureDir: 'project-nodejs',
+    patchFile: 'architect-nodejs-sandbox.patch',
+    dataset: architectNodejsDataset,
+  },
+  python: {
+    fixtureDir: 'project-python',
+    patchFile: 'architect-python-sandbox.patch',
+    dataset: architectPythonDataset,
+  },
+};
+
+async function setupSandbox(lang: EvalLanguage): Promise<string> {
+  const config = LANGUAGE_CONFIGS[lang];
+  const fixturePath = path.join(
+    import.meta.dirname,
+    `../../../../../eval-fixtures/${config.fixtureDir}`
+  );
+  const sandboxPath = path.join(os.tmpdir(), `${ARCHITECT_SANDBOX_PREFIX}${lang}-${Date.now()}`);
+
+  log.info({ lang, fixturePath, sandboxPath }, 'Creating eval sandbox from fixture');
 
   await execa('cp', ['-a', fixturePath, sandboxPath]);
 
-  const agentNodeModules = path.join(import.meta.dirname, '../../../../../node_modules');
-  const sandboxNodeModules = path.join(sandboxPath, 'node_modules');
-  if (fs.existsSync(agentNodeModules) && !fs.existsSync(sandboxNodeModules)) {
-    fs.symlinkSync(agentNodeModules, sandboxNodeModules);
+  // Ставим зависимости тем же путём, что и в проде (installDepsStep).
+  // Для Node это pnpm/npm install, для Python — uv sync.
+  const installResult = await installProjectDependencies(sandboxPath);
+  if (!installResult.passed) {
+    throw new Error(
+      `Sandbox dependency install failed: ${installResult.command}\n${installResult.stderr}`
+    );
   }
 
-  const patchPath = path.join(import.meta.dirname, '../../fixtures/architect-sandbox.patch');
+  const patchPath = path.join(import.meta.dirname, `../../fixtures/${config.patchFile}`);
   await initGitRepo(sandboxPath);
   await applyPatch(sandboxPath, patchPath);
   await stageAllFiles(sandboxPath);
   await commitFiles(sandboxPath, 'eval-fixture');
 
-  log.info({ sandboxPath }, 'Eval sandbox ready');
+  log.info({ lang, sandboxPath }, 'Eval sandbox ready');
   return sandboxPath;
 }
 
-function teardownEvalWorktree(sandboxPath: string): void {
+function teardownEvalSandbox(sandboxPath: string): void {
   log.info({ sandboxPath }, 'Tearing down eval sandbox');
   fs.rmSync(sandboxPath, { recursive: true, force: true });
 }
@@ -85,23 +120,27 @@ export function formatScorerResults(scorerResults: ScorerResultsForLog): string 
   return summary || 'no scorer results';
 }
 
-export async function runArchitectAgentEvals() {
+export async function runArchitectAgentEvals(lang: EvalLanguage) {
+  const config = LANGUAGE_CONFIGS[lang];
+  const dataset = config.dataset;
+
   // Initialize ground truth data for scorers
-  setGroundTruthData(architectDataset);
+  setGroundTruthData(dataset);
 
-  const worktreePath = await setupEvalWorktree();
+  const worktreePath = await setupSandbox(lang);
 
-  const totalItems = architectDataset.length;
+  const tokenUsage = createTokenUsageTracker();
+  const totalItems = dataset.length;
   const scorerNames = Object.keys(architectScorers);
   const concurrency = env.MAX_CONCURRENT_EVAL;
-  const itemLabelsByInput = new Map(architectDataset.map((item) => [item.input, item.id]));
+  const itemLabelsByInput = new Map(dataset.map((item) => [item.input, item.id]));
   const startedAt = Date.now();
   let completedItems = 0;
 
   console.log(
-    `[architect] Starting evals: ${totalItems} items, ${scorerNames.length} scorers, concurrency=${concurrency}`
+    `[architect:${lang}] Starting evals: ${totalItems} items, ${scorerNames.length} scorers, concurrency=${concurrency}`
   );
-  console.log(`[architect] Scorers: ${scorerNames.join(', ')}`);
+  console.log(`[architect:${lang}] Scorers: ${scorerNames.join(', ')}`);
 
   const heartbeat = setInterval(() => {
     const runningItems = Math.min(concurrency, totalItems - completedItems);
@@ -110,84 +149,83 @@ export async function runArchitectAgentEvals() {
         ? `${Math.round((Date.now() - startedAt) / completedItems / 1000)}s`
         : 'n/a';
     console.log(
-      `[architect] Still running: ${completedItems}/${totalItems} complete, ~${runningItems} in flight, avg wall/item ${avgItemWallTime}, elapsed ${formatDuration(startedAt)}`
+      `[architect:${lang}] Still running: ${completedItems}/${totalItems} complete, ~${runningItems} in flight, avg wall/item ${avgItemWallTime}, elapsed ${formatDuration(startedAt)}`
     );
   }, 30_000);
 
-  const retryingArchitectAgent = withGenerateRetry(architectAgent, {
-    maxAttempts: 3,
-    shouldRetry: (result) => {
-      const text = result.text?.trim() ?? '';
-      if (text.length === 0) {
-        return true;
-      }
-      const parsed = architectGenerateOutputSchema.safeParse(result.object);
-      return !parsed.success;
+  const wrappedArchitectAgent = wrapAgent(architectAgent, {
+    retryOptions: {
+      maxAttempts: 3,
+      schema: architectGenerateOutputSchema,
     },
+    getWorktreePath: () => worktreePath,
   });
 
   try {
-    const result = await runInWorktree(worktreePath, () =>
-      runEvals({
-        target: retryingArchitectAgent,
-        data: architectDataset,
-        scorers: {
-          agent: Object.values(architectScorers).map((entry) => entry.scorer),
+    const result = await runEvals({
+      target: wrappedArchitectAgent,
+      data: dataset,
+      scorers: {
+        agent: Object.values(architectScorers).map((entry) => entry.scorer),
+      },
+      targetOptions: {
+        modelSettings: {
+          temperature: 0,
+          maxRetries: 3,
+          maxOutputTokens: env.MAX_OUTPUT_TOKENS_ARCHITECT,
         },
-        targetOptions: {
-          modelSettings: {
-            temperature: 0,
-            maxRetries: 3,
-          },
-          structuredOutput: {
-            schema: architectGenerateOutputSchema,
-            errorStrategy: 'warn',
-          },
+        structuredOutput: {
+          schema: architectGenerateOutputSchema,
+          errorStrategy: 'warn',
         },
-        concurrency,
-        onItemComplete: async ({ item, targetResult, scorerResults }) => {
-          completedItems++;
-          const callbackStartedAt = Date.now();
-          const inputLabel =
-            typeof item.input === 'string' ? item.input.slice(0, 60) : 'unknown-item';
-          const label =
-            typeof item.input === 'string'
-              ? (itemLabelsByInput.get(item.input) ?? inputLabel)
-              : inputLabel;
-          const parsedOutput = architectGenerateOutputSchema.safeParse(targetResult.object);
-          const outputSummary = parsedOutput.success
-            ? `needsClarification=${parsedOutput.data.needsClarification}, tasks=${parsedOutput.data.tasks.length}, message="${parsedOutput.data.message.replace(/\s+/g, ' ')}"`
-            : `text="${targetResult.text.replace(/\s+/g, ' ')}"`;
+      },
+      concurrency,
+      onItemComplete: async ({ item, targetResult, scorerResults }) => {
+        completedItems++;
+        const callbackStartedAt = Date.now();
+        const inputLabel =
+          typeof item.input === 'string' ? item.input.slice(0, 60) : 'unknown-item';
+        const label =
+          typeof item.input === 'string'
+            ? (itemLabelsByInput.get(item.input) ?? inputLabel)
+            : inputLabel;
+        const parsedOutput = architectGenerateOutputSchema.safeParse(targetResult.object);
+        const outputSummary = parsedOutput.success
+          ? `needsClarification=${parsedOutput.data.needsClarification}, tasks=${parsedOutput.data.tasks.length}, message="${parsedOutput.data.message.replace(/\s+/g, ' ')}"`
+          : `text="${targetResult.text.replace(/\s+/g, ' ')}"`;
+        tokenUsage.record(targetResult);
 
-          console.log(
-            `\n[architect] Completed ${completedItems}/${totalItems}: ${label} (${formatDuration(startedAt)} elapsed)`
-          );
-          console.log(`[architect:${label}] output: ${outputSummary}`);
-          console.log(`[architect:${label}] scores: ${formatScorerResults(scorerResults)}`);
-          if (parsedOutput.success && parsedOutput.data.tasks.length > 0) {
-            console.log(`[architect:${label}] tasks:`);
-            for (const task of parsedOutput.data.tasks) {
-              console.log(`  --- ${task.title} (priority ${task.priority}) ---`);
-              console.log(task.description);
-            }
+        console.log(
+          `\n[architect:${lang}] Completed ${completedItems}/${totalItems}: ${label} (${formatDuration(startedAt)} elapsed)`
+        );
+        console.log(`[architect:${lang}:${label}] output: ${outputSummary}`);
+        console.log(`[architect:${lang}:${label}] scores: ${formatScorerResults(scorerResults)}`);
+        if (parsedOutput.success && parsedOutput.data.tasks.length > 0) {
+          console.log(`[architect:${lang}:${label}] tasks:`);
+          for (const task of parsedOutput.data.tasks) {
+            console.log(`  --- ${task.title} (priority ${task.priority}) ---`);
+            console.log(task.description);
           }
-          console.log(
-            `[architect:${label}] callback logged in ${Date.now() - callbackStartedAt}ms`
-          );
-        },
-      })
-    ).finally(() => {
+        }
+        console.log(
+          `[architect:${lang}:${label}] callback logged in ${Date.now() - callbackStartedAt}ms`
+        );
+      },
+    })
+    .finally(() => {
       clearInterval(heartbeat);
     });
 
-    console.log('\nArchitect average scores:');
+    console.log(`\nArchitect (${lang}) average scores:`);
     console.log(JSON.stringify(result.scores, null, 2));
+    console.log(`\nArchitect (${lang}) token usage:`);
+    console.log(JSON.stringify(tokenUsage.getStats(), null, 2));
     console.log(
-      `Processed ${result.summary.totalItems} architect eval items in ${formatDuration(startedAt)}`
+      `Processed ${result.summary.totalItems} architect (${lang}) eval items in ${formatDuration(startedAt)}`
     );
 
     return result;
   } finally {
-    teardownEvalWorktree(worktreePath);
+    teardownEvalSandbox(worktreePath);
   }
 }

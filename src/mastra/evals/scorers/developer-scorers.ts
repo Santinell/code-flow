@@ -19,6 +19,7 @@ import {
   fileWriteTool,
   listDirTool,
   globSearchTool,
+  installDepsTool,
 } from '../../tools/index.js';
 import {
   collectToolNames,
@@ -35,12 +36,14 @@ const DEVELOPER_ALLOWED_TOOL_NAMES = new Set([
   'moveFile',
   'listDir',
   'globSearch',
+  'installDeps',
   'file-read',
   'file-write',
   'file-delete',
   'file-move',
   'list-dir',
   'glob-search',
+  'install-deps',
 ]);
 
 const ABSOLUTE_PATH_PATTERN =
@@ -360,76 +363,75 @@ function extractToolCallsWithArgs(
   return results;
 }
 
-export const developerFaithfulnessScorer = enableJsonPromptInjection(
-  createScorer({
-    id: 'developer-faithfulness',
-    name: 'Faithfulness Scorer',
-    description: 'Evaluates faithfulness of agent output against tool results and git diff',
-    judge: {
-      model: judgeModel,
-      instructions: FAITHFULNESS_AGENT_INSTRUCTIONS,
+export const developerFaithfulnessScorer = createScorer({
+  id: 'developer-faithfulness',
+  name: 'Faithfulness Scorer',
+  description: 'Evaluates faithfulness of agent output against tool results and git diff',
+  judge: {
+    model: judgeModel,
+    jsonPromptInjection: true,
+    instructions: FAITHFULNESS_AGENT_INSTRUCTIONS,
+  },
+  type: 'agent',
+})
+  .preprocess({
+    description: 'Extract claims from agent output',
+    outputSchema: z.object({
+      claims: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => {
+      const outputText = getAssistantMessageFromRunOutput(run.output) ?? '';
+      const toolSummary = buildToolActionSummary(run.output);
+      const enrichedOutput = toolSummary
+        ? `AGENT ACTIONS (factual summary of what was done):\n${toolSummary}\n\nAGENT OUTPUT TEXT:\n${outputText}`
+        : outputText;
+      return createFaithfulnessExtractPrompt({ output: enrichedOutput });
     },
-    type: 'agent',
   })
-    .preprocess({
-      description: 'Extract claims from agent output',
-      outputSchema: z.object({
-        claims: z.array(z.string()),
-      }),
-      createPrompt: ({ run }) => {
-        const outputText = getAssistantMessageFromRunOutput(run.output) ?? '';
-        const toolSummary = buildToolActionSummary(run.output);
-        const enrichedOutput = toolSummary
-          ? `AGENT ACTIONS (factual summary of what was done):\n${toolSummary}\n\nAGENT OUTPUT TEXT:\n${outputText}`
-          : outputText;
-        return createFaithfulnessExtractPrompt({ output: enrichedOutput });
-      },
-    })
-    .analyze({
-      description: 'Verify claims against tool results and git diff',
-      outputSchema: z.object({
-        verdicts: z.array(
-          z.object({
-            claim: z.string(),
-            verdict: z.string(),
-            reason: z.string(),
-          })
-        ),
-      }),
-      createPrompt: ({ results, run }) => {
-        const claims = results?.preprocessStepResult?.claims ?? [];
-        const context = getToolResultContexts(run.output);
-        const userMessage = getUserMessageFromRunInput(run.input);
-        if (userMessage) {
-          context.unshift(userMessage);
-        }
-        return createFaithfulnessAnalyzePrompt({ claims, context });
-      },
-    })
-    .generateScore((ctx) => {
-      const verdicts = ctx?.results?.analyzeStepResult?.verdicts ?? [];
-      const totalClaims = verdicts.length;
-      const supportedClaims = verdicts.filter((v) => v.verdict === 'yes').length;
-      if (totalClaims === 0) {
-        return 0;
+  .analyze({
+    description: 'Verify claims against tool results and git diff',
+    outputSchema: z.object({
+      verdicts: z.array(
+        z.object({
+          claim: z.string(),
+          verdict: z.string(),
+          reason: z.string(),
+        })
+      ),
+    }),
+    createPrompt: ({ results, run }) => {
+      const claims = results?.preprocessStepResult?.claims ?? [];
+      const context = getToolResultContexts(run.output);
+      const userMessage = getUserMessageFromRunInput(run.input);
+      if (userMessage) {
+        context.unshift(userMessage);
       }
-      return Math.round((supportedClaims / totalClaims) * 100) / 100;
-    })
-    .generateReason({
-      description: 'Explain faithfulness score',
-      createPrompt: ({ run, results, score }) => {
-        const context = getToolResultContexts(run.output);
-        return createFaithfulnessReasonPrompt({
-          input: getUserMessageFromRunInput(run.input) ?? '',
-          output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context,
-          score,
-          scale: 1,
-          verdicts: results?.analyzeStepResult?.verdicts ?? [],
-        });
-      },
-    })
-);
+      return createFaithfulnessAnalyzePrompt({ claims, context });
+    },
+  })
+  .generateScore((ctx) => {
+    const verdicts = ctx?.results?.analyzeStepResult?.verdicts ?? [];
+    const totalClaims = verdicts.length;
+    const supportedClaims = verdicts.filter((v) => v.verdict === 'yes').length;
+    if (totalClaims === 0) {
+      return 0;
+    }
+    return Math.round((supportedClaims / totalClaims) * 100) / 100;
+  })
+  .generateReason({
+    description: 'Explain faithfulness score',
+    createPrompt: ({ run, results, score }) => {
+      const context = getToolResultContexts(run.output);
+      return createFaithfulnessReasonPrompt({
+        input: getUserMessageFromRunInput(run.input) ?? '',
+        output: getAssistantMessageFromRunOutput(run.output) ?? '',
+        context,
+        score,
+        scale: 1,
+        verdicts: results?.analyzeStepResult?.verdicts ?? [],
+      });
+    },
+  });
 
 export const developerToolCallAccuracyScorer = enableJsonPromptInjection(
   createToolCallAccuracyScorerLLM({
@@ -441,6 +443,7 @@ export const developerToolCallAccuracyScorer = enableJsonPromptInjection(
       fileMoveTool,
       listDirTool,
       globSearchTool,
+      installDepsTool,
     ] as Tool[],
   })
 );

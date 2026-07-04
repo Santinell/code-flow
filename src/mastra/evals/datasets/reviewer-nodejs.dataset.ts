@@ -10,7 +10,7 @@ import {
   NO_TESTS_DIFF,
   SQL_INJECTION_DIFF,
   XSS_VULNERABILITY_DIFF,
-} from '../fixtures/code-diffs.js';
+} from '../fixtures/code-diffs-nodejs.js';
 
 export type ReviewerDatasetItem = {
   id: string;

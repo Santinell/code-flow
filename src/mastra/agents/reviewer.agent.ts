@@ -28,6 +28,9 @@ export const reviewerAgent = new Agent({
   },
   defaultOptions: {
     maxSteps: env.MAX_STEPS_AGENT_REVIEWER,
+    modelSettings: {
+      maxOutputTokens: env.MAX_OUTPUT_TOKENS_REVIEWER,
+    },
   },
   scorers: reviewerScorers,
 });

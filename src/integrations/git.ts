@@ -73,7 +73,7 @@ export function getWorktreeDiffSync(worktreePath: string): string {
   }
 
   try {
-    const result = execaSync('git diff --unified=3 HEAD', {
+    const result = execaSync('git', ['diff', '--unified=3', 'HEAD'], {
       cwd: worktreePath,
       timeout: 5000,
       stdio: 'pipe',

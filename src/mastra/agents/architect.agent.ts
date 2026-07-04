@@ -36,17 +36,8 @@ export const architectAgent = new Agent({
     maxSteps: env.MAX_STEPS_AGENT_ARCHITECT,
     modelSettings: {
       maxRetries: 3,
-    },
-    providerOptions: {
-      anthropic: {
-        reasoningEffort: 'high',
-      },
-      openai: {
-        reasoningEffort: 'high',
-      },
-      deepseek: {
-        reasoningEffort: 'high',
-      },
+      reasoning: 'high',
+      maxOutputTokens: env.MAX_OUTPUT_TOKENS_ARCHITECT,
     },
   },
   memory: getMemory(),

@@ -1,5 +1,5 @@
 import type { ArchitectRequirementFixture } from '../fixtures/requirements.js';
-import { architectRequirements } from '../fixtures/requirements.js';
+import { architectPythonRequirements, architectNodejsRequirements } from '../fixtures/requirements.js';
 
 export type ArchitectDatasetItem = {
   id: string;
@@ -26,4 +26,7 @@ function toDatasetItem(fixture: ArchitectRequirementFixture): ArchitectDatasetIt
   };
 }
 
-export const architectDataset: ArchitectDatasetItem[] = architectRequirements.map(toDatasetItem);
+export const architectNodejsDataset: ArchitectDatasetItem[] = architectNodejsRequirements.map(toDatasetItem);
+
+export const architectPythonDataset: ArchitectDatasetItem[] =
+  architectPythonRequirements.map(toDatasetItem);

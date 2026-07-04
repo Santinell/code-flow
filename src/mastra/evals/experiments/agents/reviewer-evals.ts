@@ -1,3 +1,4 @@
+import type { EvalLanguage } from './developer-evals.js';
 import { runEvals } from '@mastra/core/evals';
 import { execa } from 'execa';
 import fs from 'node:fs';
@@ -6,44 +7,104 @@ import path from 'node:path';
 import { getEnv } from '../../../../config/env.js';
 import {
   applyPatch,
-  cleanForce,
   commitFiles,
   initGitRepo,
-  resetHard,
   stageAllFiles,
 } from '../../../../integrations/git.js';
 import { createLogger } from '../../../../utils/logger.js';
-import { runInWorktree } from '../../../../utils/worktree-context.js';
 import { reviewerAgent } from '../../../agents/reviewer.agent.js';
 import { reviewerGenerateOutputSchema } from '../../../workflows/reviewer.workflow.types.js';
-import { ReviewerDatasetItem, reviewerDataset } from '../../datasets/reviewer.dataset.js';
+import { reviewerDataset } from '../../datasets/reviewer-nodejs.dataset.js';
+import {
+  ReviewerDatasetItem,
+  reviewerPythonDataset,
+} from '../../datasets/reviewer-python.dataset.js';
 import { reviewerScorers } from '../../scorers/index.js';
+import {
+  getEvalSandboxPath,
+  withEvalSandboxRequestContext,
+} from '../../utils/sandbox-context.js';
+import { createTokenUsageTracker } from '../../utils/token-usage.js';
+import { wrapAgent } from '../../utils/wrap-agent.js';
+import { wrapScorer } from '../../utils/wrap-scorer.js';
 
 export const log = createLogger('reviewer-eval');
-export const REVIEWER_SANDBOX_PREFIX = 'reviewer-sandbox-';
 export const env = getEnv();
+export const REVIEWER_SANDBOX_PREFIX = 'reviewer-sandbox-';
 
-async function setupReviewerSandbox(): Promise<string> {
-  const fixturePath = path.join(import.meta.dirname, '../../../../../eval-fixtures/project');
-  const sandboxPath = path.join(os.tmpdir(), `${REVIEWER_SANDBOX_PREFIX}${Date.now()}`);
+interface ReviewerLanguageConfig {
+  /** Имя поддиректории в eval-fixtures/ */
+  fixtureDir: string;
+  /** Патч-файл для создания базовых файлов, упоминаемых в диффах */
+  patchFile: string;
+  /** Датасет для этого языка */
+  dataset: ReviewerDatasetItem[];
+}
 
-  log.info({ fixturePath, sandboxPath }, 'Creating reviewer eval sandbox from fixture');
+const LANGUAGE_CONFIGS: Record<EvalLanguage, ReviewerLanguageConfig> = {
+  node: {
+    fixtureDir: 'project-nodejs',
+    patchFile: 'reviewer-nodejs-sandbox.patch',
+    dataset: reviewerDataset,
+  },
+  python: {
+    fixtureDir: 'project-python',
+    patchFile: 'reviewer-python-sandbox.patch',
+    dataset: reviewerPythonDataset,
+  },
+};
+
+async function setupSandbox(lang: EvalLanguage): Promise<string> {
+  const config = LANGUAGE_CONFIGS[lang];
+  const fixturePath = path.join(
+    import.meta.dirname,
+    `../../../../../eval-fixtures/${config.fixtureDir}`
+  );
+  const sandboxPath = path.join(os.tmpdir(), `${REVIEWER_SANDBOX_PREFIX}${lang}-${Date.now()}`);
+
+  log.info({ lang, fixturePath, sandboxPath }, 'Creating reviewer eval sandbox');
 
   await execa('cp', ['-a', fixturePath, sandboxPath]);
 
-  const patchPath = path.join(import.meta.dirname, '../../fixtures/reviewer-sandbox.patch');
+  const patchPath = path.join(import.meta.dirname, `../../fixtures/${config.patchFile}`);
   await initGitRepo(sandboxPath);
   await applyPatch(sandboxPath, patchPath);
   await stageAllFiles(sandboxPath);
   await commitFiles(sandboxPath, 'eval-fixture');
 
-  log.info({ sandboxPath }, 'Reviewer eval sandbox ready');
+  log.info({ lang, sandboxPath }, 'Reviewer eval sandbox ready');
   return sandboxPath;
 }
 
-function teardownReviewerSandbox(sandboxPath: string): void {
+function teardownEvalSandbox(sandboxPath: string): void {
   log.info({ sandboxPath }, 'Tearing down reviewer eval sandbox');
   fs.rmSync(sandboxPath, { recursive: true, force: true });
+}
+
+function createItemSandboxPath(lang: EvalLanguage, itemId: string): string {
+  const safeItemId = itemId.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return path.join(os.tmpdir(), `${REVIEWER_SANDBOX_PREFIX}${lang}-${safeItemId}-${uniqueSuffix}`);
+}
+
+async function cloneSandboxForItem(
+  baseSandboxPath: string,
+  lang: EvalLanguage,
+  item: ReviewerDatasetItem
+): Promise<string> {
+  const sandboxPath = createItemSandboxPath(lang, item.id);
+  log.info(
+    { lang, itemId: item.id, baseSandboxPath, sandboxPath },
+    'Cloning reviewer eval sandbox'
+  );
+  await execa('cp', ['-a', baseSandboxPath, sandboxPath]);
+  await applyReviewerItemFiles(sandboxPath, item);
+  return sandboxPath;
+}
+
+function teardownTrackedSandbox(sandboxPath: string, sandboxes: Set<string>): void {
+  teardownEvalSandbox(sandboxPath);
+  sandboxes.delete(sandboxPath);
 }
 
 async function applyReviewerItemFiles(
@@ -71,70 +132,80 @@ async function applyReviewerItemFiles(
   }
 }
 
-async function resetReviewerSandbox(worktreePath: string, hasBeforeFiles: boolean): Promise<void> {
-  await resetHard(worktreePath);
-  await cleanForce(worktreePath);
+export async function runReviewerAgentEvals(lang: EvalLanguage) {
+  const config = LANGUAGE_CONFIGS[lang];
+  const dataset = config.dataset;
+  const baseWorktreePath = await setupSandbox(lang);
+  const itemSandboxes = new Set<string>();
+  const tokenUsage = createTokenUsageTracker();
+  const concurrency = env.MAX_CONCURRENT_EVAL;
 
-  if (hasBeforeFiles) {
-    await resetHard(worktreePath, 'HEAD~1');
-  }
-}
-
-export async function runReviewerAgentEvals() {
-  const worktreePath = await setupReviewerSandbox();
-
-  let nextIndex = 0;
-
-  async function setupNextItem() {
-    if (nextIndex < reviewerDataset.length) {
-      await applyReviewerItemFiles(worktreePath, reviewerDataset[nextIndex]);
-    }
-  }
-
-  await setupNextItem();
-  nextIndex++;
+  const wrappedReviewerAgent = wrapAgent(reviewerAgent, {
+    retryOptions: {
+      maxAttempts: 3,
+      schema: reviewerGenerateOutputSchema,
+    },
+    getWorktreePath: getEvalSandboxPath,
+  });
 
   try {
-    const result = await runInWorktree(worktreePath, async () => {
-      return runEvals({
-        target: reviewerAgent,
-        data: reviewerDataset,
-        scorers: {
-          agent: Object.values(reviewerScorers).map((entry) => entry.scorer),
+    const preparedDataset = await Promise.all(
+      dataset.map(async (item) => {
+        const sandboxPath = await cloneSandboxForItem(baseWorktreePath, lang, item);
+        itemSandboxes.add(sandboxPath);
+        return withEvalSandboxRequestContext(item, sandboxPath);
+      })
+    );
+
+    console.log(
+      `[reviewer:${lang}] Starting evals: ${dataset.length} items, concurrency=${concurrency}`
+    );
+
+    const result = await runEvals({
+      target: wrappedReviewerAgent,
+      data: preparedDataset,
+      scorers: {
+        agent: Object.values(reviewerScorers).map((entry) =>
+          wrapScorer(entry.scorer, { getWorktreePath: getEvalSandboxPath })
+        ),
+      },
+      targetOptions: {
+        structuredOutput: {
+          schema: reviewerGenerateOutputSchema,
+          errorStrategy: 'warn',
         },
-        targetOptions: {
-          structuredOutput: {
-            schema: reviewerGenerateOutputSchema,
-            errorStrategy: 'warn',
-          },
-          modelSettings: {
-            temperature: 0,
-            maxRetries: 3,
-          },
+        modelSettings: {
+          temperature: 0,
+          maxRetries: 3,
+          maxOutputTokens: env.MAX_OUTPUT_TOKENS_REVIEWER,
         },
-        concurrency: 1,
-        onItemComplete: async ({ item: completedItem, scorerResults }) => {
-          console.log(
-            `[reviewer:${completedItem.groundTruth?.expectedVerdict}] ${completedItem.input.slice(0, 80)}...`
-          );
-          console.log(JSON.stringify(scorerResults.agent ?? scorerResults, null, 2));
-          try {
-            await resetReviewerSandbox(worktreePath, !!completedItem.groundTruth?.beforeFiles);
-            await setupNextItem();
-            nextIndex++;
-          } catch (err) {
-            console.error(`[reviewer] Failed to setup next sandbox after item:`, err);
-          }
-        },
-      });
+      },
+      concurrency,
+      onItemComplete: async ({ item: completedItem, targetResult, scorerResults }) => {
+        console.log(
+          `[reviewer:${lang}:${completedItem.groundTruth?.expectedVerdict}] ${completedItem.input.slice(0, 80)}...`
+        );
+        console.log(JSON.stringify(scorerResults.agent ?? scorerResults, null, 2));
+        tokenUsage.record(targetResult);
+
+        const sandboxPath = getEvalSandboxPath(completedItem.requestContext);
+        if (sandboxPath) {
+          teardownTrackedSandbox(sandboxPath, itemSandboxes);
+        }
+      },
     });
 
-    console.log('\nReviewer average scores:');
+    console.log(`\nReviewer (${lang}) average scores:`);
     console.log(JSON.stringify(result.scores, null, 2));
-    console.log(`Processed ${result.summary.totalItems} reviewer eval items`);
+    console.log(`\nReviewer (${lang}) token usage:`);
+    console.log(JSON.stringify(tokenUsage.getStats(), null, 2));
+    console.log(`Processed ${result.summary.totalItems} reviewer (${lang}) eval items`);
 
     return { processed: result.summary.totalItems };
   } finally {
-    teardownReviewerSandbox(worktreePath);
+    for (const sandboxPath of itemSandboxes) {
+      teardownTrackedSandbox(sandboxPath, itemSandboxes);
+    }
+    teardownEvalSandbox(baseWorktreePath);
   }
 }

@@ -1,0 +1,202 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 853a998..0845bfc 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -6,7 +6,7 @@ requires-python = ">=3.11"
+ dependencies = []
+ 
+ [dependency-groups]
+-dev = ["pytest>=8.0.0", "ruff>=0.6.0"]
++dev = ["pytest>=8.0.0", "flask>=3.0.0", "ruff>=0.6.0"]
+ 
+ [build-system]
+ requires = ["hatchling"]
+diff --git a/src/app.py b/src/app.py
+new file mode 100644
+index 0000000..698fee2
+--- /dev/null
++++ b/src/app.py
+@@ -0,0 +1,14 @@
++from flask import Flask
++
++from src.routes.users import users_bp
++
++
++def create_app() -> Flask:
++    app = Flask(__name__)
++    app.url_map.strict_slashes = False
++    app.register_blueprint(users_bp, url_prefix="/api/users")
++    return app
++
++
++def start_server(port: int):
++    return create_app().run(port=port)
+diff --git a/src/auth/session.py b/src/auth/session.py
+new file mode 100644
+index 0000000..811d5da
+--- /dev/null
++++ b/src/auth/session.py
+@@ -0,0 +1,33 @@
++from dataclasses import dataclass
++from typing import Literal, Optional
++
++from flask import Request, Response
++
++Role = Literal["admin", "user"]
++
++
++@dataclass
++class Session:
++    user_id: str
++    email: str
++    role: Role
++
++
++def get_session(req: Request) -> Optional[Session]:
++    """Stub session lookup.
++
++    Currently reads a plain bearer token with no verification, no expiry,
++    and no persistence. Real login/signup, token issuance and password
++    storage are not implemented yet.
++    """
++    token = req.headers.get("Authorization")
++    if not token:
++        return None
++    return Session(user_id="stub", email="stub@example.com", role="user")
++
++
++def require_auth(req: Request, res: Response, next):
++    session = get_session(req)
++    if session is None:
++        return res.status(401).response  # pragma: no cover
++    next()
+diff --git a/src/components/header.py b/src/components/header.py
+new file mode 100644
+index 0000000..c6a911d
+--- /dev/null
++++ b/src/components/header.py
+@@ -0,0 +1,8 @@
++from flask import Blueprint
++
++header_bp = Blueprint("header", __name__)
++
++
++@header_bp.app_context_processor
++def inject_header():
++    return {"app_title": "My App"}
+diff --git a/src/pages/dashboard.py b/src/pages/dashboard.py
+new file mode 100644
+index 0000000..a19bb2d
+--- /dev/null
++++ b/src/pages/dashboard.py
+@@ -0,0 +1,5 @@
++from flask import render_template_string
++
++
++def render_dashboard():
++    return render_template_string("<div class=\"dashboard\"><h1>Dashboard</h1></div>")
+diff --git a/src/pages/users_list.py b/src/pages/users_list.py
+new file mode 100644
+index 0000000..f9eb8eb
+--- /dev/null
++++ b/src/pages/users_list.py
+@@ -0,0 +1,11 @@
++from flask import render_template_string
++
++from src.routes.users import UserPage
++
++
++def render_users_list(page: UserPage):
++    items = page.items
++    return render_template_string(
++        "<ul>{% for u in items %}<li>{{ u.name }}</li>{% endfor %}</ul>",
++        items=items,
++    )
+diff --git a/src/routes/users.py b/src/routes/users.py
+new file mode 100644
+index 0000000..08000e8
+--- /dev/null
++++ b/src/routes/users.py
+@@ -0,0 +1,22 @@
++from flask import Blueprint, jsonify, request
++
++users_bp = Blueprint("users", __name__)
++
++
++class UserPage:
++    def __init__(self, items, page, total_pages):
++        self.items = items
++        self.page = page
++        self.total_pages = total_pages
++
++
++async def list_users(page: int) -> UserPage:
++    items = await db.user.find_many(skip=(page - 1) * 20, take=20)
++    total = await db.user.count()
++    return UserPage(items=items, page=page, total_pages=(total + 19) // 20)
++
++
++@users_bp.get("/")
++async def get_users():
++    page = int(request.args.get("page", 1))
++    return jsonify(await list_users(page))
+diff --git a/src/services/smtp.py b/src/services/smtp.py
+new file mode 100644
+index 0000000..6646d06
+--- /dev/null
++++ b/src/services/smtp.py
+@@ -0,0 +1,13 @@
++from dataclasses import dataclass
++
++
++@dataclass
++class SendEmailOptions:
++    to: str
++    subject: str
++    html: str
++
++
++async def send_email(options: SendEmailOptions) -> dict:
++    await smtp_client.send(options)
++    return {"sent": True}
+diff --git a/src/services/tasks.py b/src/services/tasks.py
+new file mode 100644
+index 0000000..f5713a2
+--- /dev/null
++++ b/src/services/tasks.py
+@@ -0,0 +1,24 @@
++from dataclasses import dataclass
++from typing import Literal
++
++TaskStatus = Literal["todo", "in_progress", "done"]
++
++
++@dataclass
++class Task:
++    id: str
++    title: str
++    status: TaskStatus
++
++
++@dataclass
++class TaskStatusChange:
++    task: Task
++    previous_status: TaskStatus
++
++
++async def update_task_status(task_id: str, status: TaskStatus) -> TaskStatusChange:
++    existing = await db.task.find_unique(where={"id": task_id})
++    previous_status = existing.status
++    task = await db.task.update(where={"id": task_id}, data={"status": status})
++    return TaskStatusChange(task=task, previous_status=previous_status)
+diff --git a/src/static/styles.css b/src/static/styles.css
+new file mode 100644
+index 0000000..a35f3c4
+--- /dev/null
++++ b/src/static/styles.css
+@@ -0,0 +1,5 @@
++:root {
++    --color-bg: #ffffff;
++    --color-text: #111111;
++    --color-accent: #2563eb;
++}

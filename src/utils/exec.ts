@@ -1,24 +1,141 @@
 import { execa } from 'execa';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  LEGACY_POETRY_V1_ERROR,
+  ensureToolAvailable,
+  hasPep621Metadata,
+} from './tool-availability.js';
 
-export function detectPackageManager(projectRoot: string): string | null {
-  const indicators: Array<{ file: string; manager: string }> = [
-    { file: 'pnpm-lock.yaml', manager: 'pnpm' },
-    { file: 'package-lock.json', manager: 'npm' },
-    { file: 'yarn.lock', manager: 'yarn' },
-    { file: 'bun.lockb', manager: 'bun' },
-  ];
-  for (const { file, manager } of indicators) {
+// ════════════════════════════════════════════════════════════════════
+//  Project stack detection (language + package manager)
+//  PYTHON_PLAN.md §2.2–2.3
+// ════════════════════════════════════════════════════════════════════
+
+export type ProjectLanguage = 'node' | 'python' | 'unknown';
+
+export interface ProjectStack {
+  language: ProjectLanguage;
+  manager: string;
+}
+
+interface StackIndicator {
+  file: string;
+  language: ProjectLanguage;
+  manager: string;
+}
+
+// Порядок = приоритет автоопределения. Python-нативные lock-файлы (poetry/pdm)
+// идут раньше uv-фоллбэка: чужой lock уважаем ради воспроизводимости резолва,
+// т.к. uv его не читает (см. PYTHON_PLAN.md §2.2).
+const STACK_INDICATORS: StackIndicator[] = [
+  // Python — нативные lock-файлы (точное воспроизведение резолва)
+  { file: 'poetry.lock', language: 'python', manager: 'poetry' },
+  { file: 'pdm.lock', language: 'python', manager: 'pdm' },
+  // Python — uv (проектный режим: uv sync / uv run)
+  { file: 'uv.lock', language: 'python', manager: 'uv' },
+  { file: 'pyproject.toml', language: 'python', manager: 'uv' },
+  // Python — uv-pip (bare requirements.txt без pyproject.toml: pip-режим uv).
+  // Должен идти ПОСЛЕ pyproject.toml, иначе requirements+pyproject даст pip-режим
+  // вместо проектного. PYTHON_PLAN.md §2.2.
+  { file: 'requirements.txt', language: 'python', manager: 'uv-pip' },
+  // Node
+  { file: 'pnpm-lock.yaml', language: 'node', manager: 'pnpm' },
+  { file: 'package-lock.json', language: 'node', manager: 'npm' },
+  { file: 'yarn.lock', language: 'node', manager: 'yarn' },
+  { file: 'bun.lockb', language: 'node', manager: 'bun' },
+];
+
+/**
+ * Определяет стек проекта по файлам-индикаторам в директории: язык + менеджер.
+ *
+ * Стратегия (PYTHON_PLAN.md §2.3) — чистое динамическое детектирование по приоритету
+ * индикаторов. Override-флаг намеренно НЕ используется: он глобальный и
+ * неприменим в монорепо, где разные пакеты на разных языках (MONOREPO_PLAN.md M4).
+ * Функция per-directory — детект для worktreePath + targetPath даёт правильный стек
+ * для конкретного пакета.
+ *
+ * Python: poetry.lock/pdm.lock → нативный менеджер (ради воспроизводимости);
+ *         uv.lock или pyproject.toml → uv (проектный режим);
+ *         bare requirements.txt без pyproject.toml → uv-pip (pip-режим uv).
+ * Node: по lock-файлу (pnpm > npm > yarn > bun).
+ * Make (только Makefile): { language: 'unknown', manager: 'make' } — legacy.
+ */
+export function detectProjectStack(projectRoot: string): ProjectStack | null {
+  for (const { file, language, manager } of STACK_INDICATORS) {
     if (existsSync(join(projectRoot, file))) {
-      return manager;
+      return { language, manager };
     }
   }
+
   if (existsSync(join(projectRoot, 'Makefile'))) {
-    return 'make';
+    return { language: 'unknown', manager: 'make' };
   }
+
   return null;
 }
+
+/**
+ * @deprecated Используйте detectProjectStack(). Backward-compat обёртка.
+ */
+export function detectPackageManager(projectRoot: string): string | null {
+  return detectProjectStack(projectRoot)?.manager ?? null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Command builders per language
+// ════════════════════════════════════════════════════════════════════
+
+function buildTestCommand(
+  stack: ProjectStack,
+  filter?: string
+): { command: string; args: string[] } {
+  if (stack.language === 'node') {
+    const args = ['test'];
+    if (filter) {
+      args.push('--filter', filter);
+    }
+    return { command: stack.manager, args };
+  }
+
+  // python: uv/uv-pip/poetry/pdm → "<binary> run pytest [-k <filter>]".
+  // uv run находит готовый .venv в cwd и для проектного, и для pip-режима,
+  // поэтому бинарный вызов одинаковый для 'uv' и 'uv-pip'. pytest использует
+  // -k для фильтра по имени теста, не --filter (см. §2.4).
+  const command = stack.manager === 'uv-pip' ? 'uv' : stack.manager;
+  const args = ['run', 'pytest'];
+  if (filter) {
+    args.push('-k', filter);
+  }
+  return { command, args };
+}
+
+// Возвращает последовательность команд install. Большинство стеков — одна
+// команда; uv-pip (bare requirements.txt) — две: создать venv + поставить.
+function buildInstallCommand(stack: ProjectStack): { command: string; args: string[] }[] {
+  if (stack.language === 'node') {
+    return [{ command: stack.manager, args: ['install'] }];
+  }
+
+  // python: uv → "uv sync" (создаёт .venv + ставит); poetry/pdm → "<mgr> install".
+  if (stack.manager === 'uv') {
+    return [{ command: 'uv', args: ['sync'] }];
+  }
+  if (stack.manager === 'uv-pip') {
+    // pip-режим: uv sync требует pyproject.toml, которого здесь нет.
+    // Поэтому вручную: создать venv, потом поставить из requirements.txt.
+    // uv run pytest затем сам найдёт готовый .venv.
+    return [
+      { command: 'uv', args: ['venv'] },
+      { command: 'uv', args: ['pip', 'install', '-r', 'requirements.txt'] },
+    ];
+  }
+  return [{ command: stack.manager, args: ['install'] }];
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Execution helpers
+// ════════════════════════════════════════════════════════════════════
 
 export async function execInDir(
   command: string,
@@ -41,6 +158,34 @@ export async function execInDir(
   };
 }
 
+const NO_MANAGER_ERROR = 'No package manager detected — no lock file or Makefile found';
+
+/**
+ * Пре-проверки перед запуском install/test: доступность инструмента менеджера
+ * и (для uv) наличие PEP 621 в pyproject.toml. PYTHON_PLAN.md Фаза 2.
+ *
+ * Возвращает текст ошибки, либо null если всё ок. Не бросает.
+ */
+async function precheck(cwd: string, stack: ProjectStack): Promise<string | null> {
+  // uv-pip использует тот же бинарник `uv`, что и проектный режим.
+  const tool = stack.manager === 'uv-pip' ? 'uv' : stack.manager;
+
+  // 1. Инструмент менеджера должен быть в PATH
+  const toolError = await ensureToolAvailable(tool);
+  if (toolError) {
+    return toolError;
+  }
+
+  // 2. uv (проектный режим) не парсит legacy [tool.poetry.dependencies] — только
+  // PEP 621 [project]. uv-pip это не касается: pip-style с requirements.txt
+  // легитимен без pyproject.toml. PYTHON_PLAN.md §2.2.
+  if (stack.manager === 'uv' && !hasPep621Metadata(cwd)) {
+    return LEGACY_POETRY_V1_ERROR;
+  }
+
+  return null;
+}
+
 export async function runProjectTests(
   cwd: string,
   filter?: string,
@@ -53,11 +198,11 @@ export async function runProjectTests(
   command: string;
   manager: string | null;
 }> {
-  const manager = detectPackageManager(cwd);
-  if (!manager) {
+  const stack = detectProjectStack(cwd);
+  if (!stack) {
     return {
       stdout: '',
-      stderr: 'No package manager detected — no lock file or Makefile found',
+      stderr: NO_MANAGER_ERROR,
       exitCode: 1,
       passed: false,
       command: 'unknown',
@@ -65,27 +210,46 @@ export async function runProjectTests(
     };
   }
 
-  const args = ['test'];
-
-  if (filter && manager !== 'make') {
-    args.push('--filter', filter);
+  // Make-проекты: legacy, filter не поддерживается
+  if (stack.language === 'unknown' && stack.manager === 'make') {
+    const result = await execInDir('make', ['test'], cwd, timeout);
+    return { ...result, passed: result.exitCode === 0, command: 'make test', manager: 'make' };
   }
 
-  const result = await execInDir(manager, args, cwd, timeout);
+  const precheckError = await precheck(cwd, stack);
+  if (precheckError) {
+    return {
+      stdout: '',
+      stderr: precheckError,
+      exitCode: 1,
+      passed: false,
+      command: 'unknown',
+      manager: stack.manager,
+    };
+  }
+
+  const { command, args } = buildTestCommand(stack, filter);
+  const result = await execInDir(command, args, cwd, timeout);
   return {
     ...result,
     passed: result.exitCode === 0,
-    command: `${manager} ${args.join(' ')}`,
-    manager,
+    command: `${command} ${args.join(' ')}`,
+    manager: stack.manager,
   };
 }
 
 /**
- * Восстанавливает зависимости в проекте через обнаруженный пакетный менеджер.
- * Использует тот же detectPackageManager(), что и runProjectTests().
+ * Восстанавливает зависимости через обнаруженный пакетный менеджер (node или python).
  *
- * Для проектов на Make (только Makefile, без lock-файла) — не запускается:
- * такие проекты сами управляют своими зависимостями через make-таргеты.
+ * Python (PYTHON_PLAN.md §2.2):
+ *  - uv: `uv sync` — сам создаёт .venv и ставит Python.
+ *  - uv-pip (bare requirements.txt): `uv venv` + `uv pip install -r requirements.txt`.
+ *  - poetry/pdm: `<mgr> install` — нативный менеджер, уважаем lock ради воспроизводимости.
+ * Node: `<manager> install`.
+ * Make: skip — такие проекты управляют зависимостями сами.
+ *
+ * Команды выполняются последовательно; при первом провале оставшиеся не идут.
+ * `command` в отчёте — вся цепочка через `&&` (как было бы в shell).
  */
 export async function installProjectDependencies(
   cwd: string,
@@ -99,11 +263,11 @@ export async function installProjectDependencies(
   command: string;
   manager: string | null;
 }> {
-  const manager = detectPackageManager(cwd);
-  if (!manager) {
+  const stack = detectProjectStack(cwd);
+  if (!stack) {
     return {
       stdout: '',
-      stderr: 'No package manager detected — no lock file or Makefile found',
+      stderr: NO_MANAGER_ERROR,
       exitCode: 1,
       passed: false,
       skipped: false,
@@ -113,7 +277,7 @@ export async function installProjectDependencies(
   }
 
   // Make-проекты управляют зависимостями сами — install-таргет не универсален.
-  if (manager === 'make') {
+  if (stack.language === 'unknown' && stack.manager === 'make') {
     return {
       stdout: '',
       stderr: '',
@@ -121,17 +285,46 @@ export async function installProjectDependencies(
       passed: true,
       skipped: true,
       command: 'make (skipped)',
-      manager,
+      manager: 'make',
     };
   }
 
-  const args = ['install'];
-  const result = await execInDir(manager, args, cwd, timeout);
+  const precheckError = await precheck(cwd, stack);
+  if (precheckError) {
+    return {
+      stdout: '',
+      stderr: precheckError,
+      exitCode: 1,
+      passed: false,
+      skipped: false,
+      command: 'unknown',
+      manager: stack.manager,
+    };
+  }
+
+  const commands = buildInstallCommand(stack);
+  const commandLabel = commands.map((c) => `${c.command} ${c.args.join(' ')}`).join(' && ');
+
+  let stdout = '';
+  let stderr = '';
+  let exitCode = 0;
+  for (const { command, args } of commands) {
+    const result = await execInDir(command, args, cwd, timeout);
+    stdout += result.stdout;
+    stderr += result.stderr;
+    exitCode = result.exitCode;
+    if (exitCode !== 0) {
+      break; // не продолжаем после провала
+    }
+  }
+
   return {
-    ...result,
-    passed: result.exitCode === 0,
+    stdout,
+    stderr,
+    exitCode,
+    passed: exitCode === 0,
     skipped: false,
-    command: `${manager} ${args.join(' ')}`,
-    manager,
+    command: commandLabel,
+    manager: stack.manager,
   };
 }

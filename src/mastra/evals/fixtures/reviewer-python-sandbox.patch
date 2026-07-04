@@ -1,0 +1,82 @@
+diff --git a/src/auth/password.py b/src/auth/password.py
+new file mode 100644
+index 0000000..5e1ae78
+--- /dev/null
++++ b/src/auth/password.py
+@@ -0,0 +1,11 @@
++import re
++
++
++def validate_password(password: str) -> bool:
++    if len(password) < 12:
++        return False
++    if not re.search(r"[A-Z]", password):
++        return False
++    if not re.search(r"[0-9]", password):
++        return False
++    return True
+diff --git a/src/components/profile.py b/src/components/profile.py
+new file mode 100644
+index 0000000..14c926c
+--- /dev/null
++++ b/src/components/profile.py
+@@ -0,0 +1,4 @@
++from django.utils.safestring import mark_safe
++
++def render_profile(bio: str) -> str:
++    return f"<p>{bio}</p>"
+diff --git a/src/config/payments.py b/src/config/payments.py
+new file mode 100644
+index 0000000..6af8039
+--- /dev/null
++++ b/src/config/payments.py
+@@ -0,0 +1,6 @@
++import os
++
++PAYMENT_CONFIG = {
++    "api_key": os.environ["STRIPE_API_KEY"],
++    "webhook_tolerance_ms": 300000,
++}
+diff --git a/src/middleware/auth.py b/src/middleware/auth.py
+new file mode 100644
+index 0000000..e3ae2ed
+--- /dev/null
++++ b/src/middleware/auth.py
+@@ -0,0 +1,6 @@
++async def require_admin(req, res, next):
++    if not req.user:
++        return res.status(401).send("Unauthorized")
++    if req.user["role"] != "admin":
++        return res.status(403).send("Forbidden")
++    return next()
+diff --git a/src/routes/users.py b/src/routes/users.py
+new file mode 100644
+index 0000000..557d4e3
+--- /dev/null
++++ b/src/routes/users.py
+@@ -0,0 +1,4 @@
++async def get_user(req, res):
++    email = req.query["email"]
++    user = await db.user.find_unique(where={"email": email})
++    return res.json(user)
+diff --git a/src/services/invoices.py b/src/services/invoices.py
+new file mode 100644
+index 0000000..b7dfa40
+--- /dev/null
++++ b/src/services/invoices.py
+@@ -0,0 +1,4 @@
++async def send_invoice(invoice_id: str) -> dict:
++    invoice = await invoice_repository.find_by_id(invoice_id)
++    await email_client.send(invoice.email, render_invoice(invoice))
++    return {"sent": True}
+diff --git a/src/utils/format.py b/src/utils/format.py
+new file mode 100644
+index 0000000..2168f3b
+--- /dev/null
++++ b/src/utils/format.py
+@@ -0,0 +1,5 @@
++def format_display_name(first_name: str, last_name: str) -> str:
++    first = first_name.strip()
++    last = last_name.strip()
++    parts = [p for p in [first, last] if p]
++    return " ".join(parts)

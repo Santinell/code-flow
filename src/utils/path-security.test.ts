@@ -125,6 +125,9 @@ describe('validatePath', () => {
     it(`blocks ${op} on .npmrc`, () => {
       expect(validatePath('.npmrc', op).allowed).toBe(false);
     });
+    it(`blocks ${op} on .pypirc`, () => {
+      expect(validatePath('.pypirc', op).allowed).toBe(false);
+    });
   }
 
   // ── 6. Protected entries — вложенные (basename) ────────────────
@@ -145,6 +148,12 @@ describe('validatePath', () => {
     const result = validatePath('deep/path/.npmrc', 'delete');
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('.npmrc');
+  });
+
+  it('blocks reading nested .pypirc (config/.pypirc)', () => {
+    const result = validatePath('config/.pypirc', 'read');
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain('.pypirc');
   });
 
   // ── 7. .env.example — не защищён ──────────────────────────────

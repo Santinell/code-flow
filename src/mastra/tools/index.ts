@@ -3,7 +3,7 @@ import fg from 'fast-glob';
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runProjectTests } from '../../utils/exec.js';
+import { installProjectDependencies, runProjectTests } from '../../utils/exec.js';
 import { createLogger } from '../../utils/logger.js';
 import { validatePath } from '../../utils/path-security.js';
 
@@ -166,13 +166,15 @@ Directories are suffixed with "/" for easy identification.`,
 export const globSearchTool = createTool({
   id: 'glob-search',
   description: `Search for files matching a glob pattern in the project.
-Supports recursive patterns like "src/**/*.ts", "**/*.test.ts", etc.
+Supports recursive patterns like "src/**/*.ts", "**/*.test.ts", "src/**/*.py", "**/test_*.py", etc.
 Returns relative file paths sorted alphabetically. Use this instead of "find" — shell commands are restricted.`,
   inputSchema: z.object({
     pattern: z
       .string()
       .max(500, 'Pattern too long — maximum 500 characters')
-      .describe('Glob pattern relative to project root (e.g. "src/**/*.ts", "tests/**/*.test.ts")'),
+      .describe(
+        'Glob pattern relative to project root (e.g. "src/**/*.ts", "tests/**/*.test.ts", "src/**/*.py", "tests/**/*.py")'
+      ),
   }),
   execute: async (inputData) => {
     const validation = validatePath('.', 'read');
@@ -185,7 +187,14 @@ Returns relative file paths sorted alphabetically. Use this instead of "find" �
     const files = await fg(inputData.pattern, {
       cwd: root,
       onlyFiles: true,
-      ignore: ['**/node_modules/**', '**/.git/**'],
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/__pycache__/**',
+        '**/.venv/**',
+        '**/*.egg-info/**',
+        '**/.pytest_cache/**',
+      ],
       absolute: false,
       unique: true,
     });
@@ -198,15 +207,17 @@ Returns relative file paths sorted alphabetically. Use this instead of "find" �
 
 export const runTestsTool = createTool({
   id: 'run-tests',
-  description: `Run the project's test suite. Auto-detects the package manager (npm, pnpm, yarn, bun, make).
-Use this instead of "npm test", "pnpm test", etc. — it picks the right command automatically.
+  description: `Run the project's test suite. Auto-detects the package manager and language.
+Node.js: npm, pnpm, yarn, bun (runs "<manager> test").
+Python: uv, poetry, pdm (runs "<manager> run pytest"). Also supports make projects.
+Use this instead of "npm test", "pnpm test", "uv run pytest", etc. — it picks the right command automatically.
 Optionally pass a filter to run a specific test file or test name.`,
   inputSchema: z.object({
     filter: z
       .string()
       .optional()
       .describe(
-        'Optional: test file path or test name pattern to run (e.g. "src/utils/format.test.ts" or "formatName")'
+        'Optional: test file path or test name pattern. Node: "src/utils/format.test.ts" or "formatName". Python: "src/utils/test_format.py" or "test_format_name" (passed to pytest -k).'
       ),
   }),
   execute: async (inputData) => {
@@ -222,6 +233,39 @@ Optionally pass a filter to run a specific test file or test name.`,
       stdout: result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
+      manager: result.manager,
+      command: result.command,
+    };
+  },
+});
+
+export const installDepsTool = createTool({
+  id: 'install-deps',
+  description: `Install or restore the project's dependencies. Auto-detects the package manager and language.
+Node.js: npm/pnpm/yarn/bun (runs "<manager> install").
+Python: uv (\`uv sync\`), poetry (\`poetry install\`), pdm (\`pdm install\`).
+Call this when a dependency is missing or after changing dependency manifests (package.json, pyproject.toml, requirements.txt).
+This is an infrastructure action — it does NOT modify source files, only the dependency tree.`,
+  inputSchema: z.object({}),
+  execute: async () => {
+    const validation = validatePath('.', 'read');
+    if (!validation.allowed) {
+      return {
+        stdout: '',
+        stderr: validation.reason ?? 'Path not allowed',
+        exitCode: 1,
+        skipped: false,
+      };
+    }
+
+    const projectRoot = path.dirname(validation.resolvedPath);
+    const result = await installProjectDependencies(projectRoot);
+
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      skipped: result.skipped,
       manager: result.manager,
       command: result.command,
     };

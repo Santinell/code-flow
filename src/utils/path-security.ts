@@ -28,6 +28,7 @@ const PROTECTED_ENTRIES = new Set([
   '.ssh',
   'id_rsa',
   '.npmrc',
+  '.pypirc', // Python: содержит токены для приватных PyPI-реестров
 ]);
 
 export interface PathValidationResult {

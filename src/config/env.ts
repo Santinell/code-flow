@@ -59,6 +59,11 @@ const envSchema = z.object({
   MAX_STEPS_AGENT_REVIEWER: z.coerce.number().int().min(3).default(5),
   MAX_STEPS_AGENT_ARCHITECT: z.coerce.number().int().min(5).default(10),
 
+  // Agent output token budgets — propagated to modelSettings.maxOutputTokens
+  MAX_OUTPUT_TOKENS_DEVELOPER: z.coerce.number().int().min(1024).default(2048),
+  MAX_OUTPUT_TOKENS_REVIEWER: z.coerce.number().int().min(1024).default(2048),
+  MAX_OUTPUT_TOKENS_ARCHITECT: z.coerce.number().int().min(1024).default(8192),
+
   // Storage
   DB_PATH: z.string().default('./data/agent-dev.db'),
 

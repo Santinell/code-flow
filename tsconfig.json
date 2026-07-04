@@ -13,6 +13,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*", "src/mastra/evals/fixtures/code-diffs.ts"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -20,12 +20,17 @@ Explore the project structure using listDir, globSearch, and readFile. **Do NOT 
 
 ## Tool selection
 - listDir for listing a specific directory
-- globSearch for pattern-based file search (e.g. "src/**/*.ts")
+- globSearch for pattern-based file search (e.g. "src/**/*.ts", "src/**/*.py")
 - readFile for reading individual files
 
 ## Required Report (output as TEXT after exploration)
-Output 2-4 sentences with concrete facts. Example format:
-"Project uses TypeScript with strict mode. Found package.json with vitest. The file src/utils/math.ts does not exist yet. I will create it with the requested function."`;
+Output 2-4 sentences with concrete facts about the detected language, framework, and test runner. Example formats:
+
+TypeScript/Node:
+"Project uses TypeScript with strict mode. Found package.json with vitest. The file src/utils/math.ts does not exist yet. I will create it with the requested function."
+
+Python:
+"Project uses Python 3.11 with pyproject.toml (uv). Found pytest. The file src/utils/math.py does not exist yet. I will create it with the requested function."`;
 
 export const analyzeCodebaseStep = createStep({
   id: 'analyze-codebase',

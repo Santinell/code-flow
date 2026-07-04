@@ -8,7 +8,17 @@ vi.mock('execa', () => ({
   execa: (...args: [string, string[], Record<string, string>]) => mockExeca(...args),
 }));
 
-const { detectPackageManager, installProjectDependencies, runProjectTests } =
+// precheck (tool-availability) тестируется отдельно; здесь изолируем exec-логику.
+// По умолчанию инструмент доступен, PEP 621 OK — install/test доходят до execa.
+const mockEnsureTool = vi.fn().mockResolvedValue(null);
+const mockHasPep621 = vi.fn().mockReturnValue(true);
+vi.mock('./tool-availability.js', () => ({
+  ensureToolAvailable: (...args: [string]) => mockEnsureTool(...args),
+  hasPep621Metadata: (...args: [string]) => mockHasPep621(...args),
+  LEGACY_POETRY_V1_ERROR: 'LEGACY_POETRY_V1_ERROR_PLACEHOLDER',
+}));
+
+const { detectPackageManager, detectProjectStack, installProjectDependencies, runProjectTests } =
   await import('./exec.js');
 
 describe('detectPackageManager', () => {
@@ -61,15 +71,96 @@ describe('detectPackageManager', () => {
   });
 });
 
+describe('detectProjectStack', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-stack-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ── Node auto-detection ──────────────────────────────────────────
+
+  it('detects node/pnpm from pnpm-lock.yaml', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'node', manager: 'pnpm' });
+  });
+
+  it('detects node/npm from package-lock.json', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'node', manager: 'npm' });
+  });
+
+  // ── Python auto-detection: native lock (priority) ────────────────
+
+  it('detects python/poetry from poetry.lock', () => {
+    fs.writeFileSync(path.join(tmpDir, 'poetry.lock'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'poetry' });
+  });
+
+  it('detects python/pdm from pdm.lock', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pdm.lock'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'pdm' });
+  });
+
+  // ── Python auto-detection: uv fallback ───────────────────────────
+
+  it('detects python/uv from uv.lock', () => {
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'uv' });
+  });
+
+  it('detects python/uv-pip from bare requirements.txt (no pyproject.toml)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'requirements.txt'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'uv-pip' });
+  });
+
+  it('detects python/uv from pyproject.toml (no native lock)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'uv' });
+  });
+
+  it('prefers uv (project mode) over uv-pip when both pyproject.toml and requirements.txt exist', () => {
+    fs.writeFileSync(path.join(tmpDir, 'requirements.txt'), '');
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'uv' });
+  });
+
+  // ── Native lock wins over uv fallback ────────────────────────────
+
+  it('prefers native poetry.lock over pyproject.toml (uv)', () => {
+    fs.writeFileSync(path.join(tmpDir, 'poetry.lock'), '');
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'python', manager: 'poetry' });
+  });
+
+  // ── Make / null ──────────────────────────────────────────────────
+
+  it('falls back to make stack when only Makefile exists', () => {
+    fs.writeFileSync(path.join(tmpDir, 'Makefile'), '');
+    expect(detectProjectStack(tmpDir)).toEqual({ language: 'unknown', manager: 'make' });
+  });
+
+  it('returns null when no indicators present', () => {
+    expect(detectProjectStack(tmpDir)).toBeNull();
+  });
+});
+
 describe('runProjectTests', () => {
   const projectRoot = '/tmp/__cf_test_project__';
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Дефолт precheck: инструмент доступен, PEP 621 OK
+    mockEnsureTool.mockResolvedValue(null);
+    mockHasPep621.mockReturnValue(true);
   });
 
   it('returns failure when no package manager detected', async () => {
-    // mockExeca не будет вызван — detectPackageManager вернёт null
+    // mockExeca не будет вызван — detectProjectStack вернёт null
     const result = await runProjectTests(projectRoot);
     expect(result.passed).toBe(false);
     expect(result.manager).toBeNull();
@@ -181,6 +272,131 @@ describe('runProjectTests', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  // ── Python ───────────────────────────────────────────────────────
+
+  it('runs uv run pytest for uv.lock', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '3 passed', stderr: '', exitCode: 0 });
+
+    const result = await runProjectTests(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'uv',
+      ['run', 'pytest'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.passed).toBe(true);
+    expect(result.command).toBe('uv run pytest');
+    expect(result.manager).toBe('uv');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs uv run pytest for bare requirements.txt (uv-pip mode)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'requirements.txt'), 'pytest>=8.0.0\n');
+
+    mockExeca.mockResolvedValue({ stdout: '3 passed', stderr: '', exitCode: 0 });
+
+    const result = await runProjectTests(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'uv',
+      ['run', 'pytest'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.passed).toBe(true);
+    expect(result.command).toBe('uv run pytest');
+    expect(result.manager).toBe('uv-pip');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs poetry run pytest for poetry.lock', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'poetry.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await runProjectTests(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'poetry',
+      ['run', 'pytest'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.command).toBe('poetry run pytest');
+    expect(result.manager).toBe('poetry');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs pdm run pytest for pdm.lock', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'pdm.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await runProjectTests(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'pdm',
+      ['run', 'pytest'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.command).toBe('pdm run pytest');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('uses -k filter flag for python managers (not --filter)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await runProjectTests(tmpDir, 'test_addition');
+    expect(mockExeca).toHaveBeenCalledWith(
+      'uv',
+      ['run', 'pytest', '-k', 'test_addition'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.command).toBe('uv run pytest -k test_addition');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ── Precheck (health-check) integration ──────────────────────────
+
+  it('returns precheck error when manager tool is unavailable', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+
+    mockEnsureTool.mockResolvedValue("Tool 'uv' not found in PATH. Install: ...");
+
+    const result = await runProjectTests(tmpDir);
+    expect(result.passed).toBe(false);
+    expect(result.command).toBe('unknown');
+    expect(result.manager).toBe('uv');
+    expect(result.stderr).toContain("Tool 'uv' not found");
+    // execa для test-команды не должен был вызваться (только precheck через mock)
+    expect(mockExeca).not.toHaveBeenCalled();
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns legacy Poetry v1 error when uv project lacks PEP 621', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-run-'));
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '[tool.poetry]\n');
+
+    mockHasPep621.mockReturnValue(false);
+
+    const result = await runProjectTests(tmpDir);
+    expect(result.passed).toBe(false);
+    expect(result.stderr).toContain('LEGACY_POETRY_V1_ERROR_PLACEHOLDER');
+    expect(mockExeca).not.toHaveBeenCalled();
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });
 
 describe('installProjectDependencies', () => {
@@ -188,6 +404,9 @@ describe('installProjectDependencies', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Дефолт precheck: инструмент доступен, PEP 621 OK
+    mockEnsureTool.mockResolvedValue(null);
+    mockHasPep621.mockReturnValue(true);
   });
 
   it('returns failure when no package manager detected', async () => {
@@ -294,6 +513,140 @@ describe('installProjectDependencies', () => {
       ['install'],
       expect.objectContaining({ timeout: 10_000 })
     );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ── Python ───────────────────────────────────────────────────────
+
+  it('runs uv sync for uv.lock (creates .venv + installs)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: 'Resolved 10 packages', stderr: '', exitCode: 0 });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'uv',
+      ['sync'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.passed).toBe(true);
+    expect(result.command).toBe('uv sync');
+    expect(result.manager).toBe('uv');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs uv venv + uv pip install for bare requirements.txt (uv-pip mode)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'requirements.txt'), 'pytest>=8.0.0\n');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await installProjectDependencies(tmpDir);
+    // Две последовательные команды
+    expect(mockExeca).toHaveBeenNthCalledWith(
+      1,
+      'uv',
+      ['venv'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(mockExeca).toHaveBeenNthCalledWith(
+      2,
+      'uv',
+      ['pip', 'install', '-r', 'requirements.txt'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(mockExeca).toHaveBeenCalledTimes(2);
+    expect(result.passed).toBe(true);
+    expect(result.command).toBe('uv venv && uv pip install -r requirements.txt');
+    expect(result.manager).toBe('uv-pip');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('stops uv-pip sequence if venv creation fails', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'requirements.txt'), 'pytest\n');
+
+    mockExeca
+      .mockResolvedValueOnce({ stdout: '', stderr: 'venv error', exitCode: 1 })
+      .mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledTimes(1); // pip install не должен был вызваться
+    expect(result.passed).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('venv error');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs poetry install for poetry.lock', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'poetry.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'poetry',
+      ['install'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.command).toBe('poetry install');
+    expect(result.manager).toBe('poetry');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('runs pdm install for pdm.lock', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'pdm.lock'), '');
+
+    mockExeca.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(mockExeca).toHaveBeenCalledWith(
+      'pdm',
+      ['install'],
+      expect.objectContaining({ cwd: tmpDir })
+    );
+    expect(result.command).toBe('pdm install');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // ── Precheck (health-check) integration ──────────────────────────
+
+  it('returns precheck error when manager tool is unavailable', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+
+    mockEnsureTool.mockResolvedValue("Tool 'uv' not found in PATH. Install: ...");
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(result.passed).toBe(false);
+    expect(result.skipped).toBe(false);
+    expect(result.command).toBe('unknown');
+    expect(result.manager).toBe('uv');
+    expect(result.stderr).toContain("Tool 'uv' not found");
+    expect(mockExeca).not.toHaveBeenCalled();
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns legacy Poetry v1 error when uv project lacks PEP 621', async () => {
+    const tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-install-'));
+    fs.writeFileSync(path.join(tmpDir, 'pyproject.toml'), '[tool.poetry]\n');
+
+    mockHasPep621.mockReturnValue(false);
+
+    const result = await installProjectDependencies(tmpDir);
+    expect(result.passed).toBe(false);
+    expect(result.stderr).toContain('LEGACY_POETRY_V1_ERROR_PLACEHOLDER');
+    expect(mockExeca).not.toHaveBeenCalled();
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

@@ -1,4 +1,5 @@
 import { createStep } from '@mastra/core/workflows';
+// import { getEnv } from '../../../config/env.js';
 import { createLogger } from '../../../utils/logger.js';
 import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
 import { reviewerAgent } from '../../agents/reviewer.agent.js';
@@ -13,6 +14,7 @@ import {
 } from '../../workflows/reviewer.workflow.types.js';
 
 const log = createLogger('review-code-step');
+// const env = getEnv();
 
 export const reviewCodeStep = createStep({
   id: 'review-code',
@@ -61,6 +63,7 @@ You cannot run commands or modify anything — only read and analyze.`;
         },
         modelSettings: {
           maxRetries: 3,
+          maxOutputTokens: env.MAX_OUTPUT_TOKENS_REVIEWER,
         },
         returnScorerData: true,
       });

@@ -15,6 +15,11 @@
       "baseUrl": "https://api.openai.com/v1",
       "apiKey": ""
     },
+    "z-ai": {
+      "mode": "openai",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+      "apiKey": ""
+    },
     "ollama": {
       "mode": "ollama",
       "baseUrl": "http://localhost:11434/api"
@@ -31,26 +36,44 @@
   },
   "agents": {
     "architect": {
-      "provider": "deepseek",
-      "model": "deepseek-v4-pro",
+      "provider": "z-ai",
+      "model": "glm-5.2",
       "fallbacks": [
         {
-          "provider": "claude",
-          "model": "claude-sonnet-4-6"
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro"
         }
       ]
     },
     "reviewer": {
-      "provider": "deepseek",
-      "model": "deepseek-v4-flash"
+      "provider": "z-ai",
+      "model": "glm-5",
+      "fallbacks": [
+        {
+          "provider": "deepseek",
+          "model": "deepseek-v4-flash"
+        }
+      ]
     },
     "developer": {
-      "provider": "deepseek",
-      "model": "deepseek-v4-flash"
+      "provider": "z-ai",
+      "model": "glm-5",
+      "fallbacks": [
+        {
+          "provider": "deepseek",
+          "model": "deepseek-v4-flash"
+        }
+      ]
     },
     "judge": {
-      "provider": "deepseek",
-      "model": "deepseek-v4-flash"
+      "provider": "z-ai",
+      "model": "glm-5",
+      "fallbacks": [
+        {
+          "provider": "deepseek",
+          "model": "deepseek-v4-flash"
+        }
+      ]
     },
     "embedding": {
       "provider": "embedding-ollama",

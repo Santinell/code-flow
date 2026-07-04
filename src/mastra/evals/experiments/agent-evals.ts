@@ -1,30 +1,52 @@
 import { fileURLToPath } from 'node:url';
 import { runArchitectAgentEvals } from './agents/architect-evals.js';
-import { runDeveloperAgentEvals } from './agents/developer-evals.js';
+import { runDeveloperAgentEvals, type EvalLanguage } from './agents/developer-evals.js';
 import { runReviewerAgentEvals } from './agents/reviewer-evals.js';
 
 const cliArgs = process.argv.slice(2);
-const agentFlag = cliArgs.find((a) => a.startsWith('--agent='))?.split('=')[1];
+const agentFlag = cliArgs.find((a) => a.startsWith('--agent='))?.split('=')[1] as
+  | 'architect'
+  | 'developer'
+  | 'reviewer'
+  | undefined;
+const langFlag = cliArgs.find((a) => a.startsWith('--lang='))?.split('=')[1] as
+  | EvalLanguage
+  | undefined;
 const isCI = cliArgs.includes('--ci');
+
+const SUPPORTED_LANGS: EvalLanguage[] = ['node', 'python'];
 
 async function main() {
   if (!agentFlag && !isCI) {
-    console.error('Usage: tsx agent-evals.ts --agent=architect|developer|reviewer [--ci]');
+    console.error(
+      'Usage: tsx agent-evals.ts --agent=architect|developer|reviewer [--lang=node|python] [--ci]'
+    );
     process.exit(1);
   }
+  if (langFlag && !SUPPORTED_LANGS.includes(langFlag)) {
+    console.error(`Unsupported --lang=${langFlag}. Supported: ${SUPPORTED_LANGS.join(', ')}.`);
+    process.exit(1);
+  }
+  const langs: EvalLanguage[] = langFlag ? [langFlag] : SUPPORTED_LANGS;
 
   const mode = agentFlag ?? 'ci';
-  console.log(`Agent eval mode: ${mode}`);
+  console.log(`Agent eval mode: ${mode}, langs: ${langs.join(', ')}`);
 
   switch (true) {
     case mode === 'developer' || isCI:
-      await runDeveloperAgentEvals();
+      for (const lang of langs) {
+        await runDeveloperAgentEvals(lang);
+      }
       break;
     case mode === 'reviewer' || isCI:
-      await runReviewerAgentEvals();
+      for (const lang of langs) {
+        await runReviewerAgentEvals(lang);
+      }
       break;
     case mode === 'architect' || isCI:
-      await runArchitectAgentEvals();
+      for (const lang of langs) {
+        await runArchitectAgentEvals(lang);
+      }
       break;
     default:
       console.log(`${agentFlag} agent evals are not implemented yet.`);

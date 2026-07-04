@@ -16,9 +16,7 @@ export const runTestsStep = createStep({
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);
 
-    const testResult = await runInWorktree(worktreePath, async () =>
-      runProjectTests(worktreePath)
-    );
+    const testResult = await runInWorktree(worktreePath, async () => runProjectTests(worktreePath));
 
     log.info(
       {

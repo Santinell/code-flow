@@ -105,7 +105,8 @@ describe('getWorktreeDiffSync', () => {
     const result = getWorktreeDiffSync('/home/user/worktrees/feat-1');
     expect(result).toContain('--- a/file.ts');
     expect(mockExecaSync).toHaveBeenCalledWith(
-      'git diff --unified=3 HEAD',
+      'git',
+      ['diff', '--unified=3', 'HEAD'],
       expect.objectContaining({
         cwd: '/home/user/worktrees/feat-1',
         timeout: 5000,
