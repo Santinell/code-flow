@@ -341,6 +341,8 @@ function buildToolActionSummary(
       lines.push(`- Moved ${path} to ${dst}`);
     } else if (tc.toolName === 'listDir' || tc.toolName === 'list-dir') {
       lines.push(`- Listed directory ${path}`);
+    } else if (tc.toolName === 'editFile') {
+      lines.push(`- Edited ${path}`);
     }
     // skip globSearch — not actionable
   }

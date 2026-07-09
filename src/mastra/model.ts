@@ -1,5 +1,4 @@
 import type { EmbeddingModelV3, LanguageModelV3 } from '@ai-sdk/provider';
-import type { ModelWithRetries } from '@mastra/core/agent';
 import {
   type AnthropicProvider,
   type AnthropicProviderSettings,
@@ -16,9 +15,9 @@ import {
   getAgentMainEntry,
   getAgentModelEntries,
   getProviderConfig,
-  type ModelEntry,
   type AiProviderConfig,
 } from '#config/providers';
+import { wrapModel } from '../utils/wrap-model';
 
 let openaiProvider: OpenAIProvider | null = null;
 let deepseekProvider: DeepSeekProvider | null = null;
@@ -101,27 +100,17 @@ function createEmbeddingModel(
   }
 }
 
-function entryToModel(entry: ModelEntry): ModelWithRetries {
-  const providerConfig = getProviderConfig(entry.provider);
-  return {
-    id: `${entry.provider}/${entry.model}`,
-    model: createLanguageModel(providerConfig, entry.model),
-  };
-}
-
 export function getEmbeddingModel(agentName: string): EmbeddingModelV3 {
   const entry = getAgentMainEntry(agentName);
   const providerConfig = getProviderConfig(entry.provider);
   return createEmbeddingModel(providerConfig, entry.model, entry.dimensions ?? 768);
 }
 
-export function getMainModel(agentName: string): LanguageModelV3 {
-  const entry = getAgentMainEntry(agentName);
-  const providerConfig = getProviderConfig(entry.provider);
-  return createLanguageModel(providerConfig, entry.model);
-}
-
-export function getModel(agentName: string): ModelWithRetries[] {
+export function getModel(agentName: string): LanguageModelV3 {
   const entries = getAgentModelEntries(agentName);
-  return entries.map(entryToModel);
+  const models = entries.map((entry) => {
+    const providerConfig = getProviderConfig(entry.provider);
+    return createLanguageModel(providerConfig, entry.model);
+  });
+  return wrapModel(models);
 }

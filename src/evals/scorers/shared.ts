@@ -5,10 +5,10 @@ import {
   ScorerRunOutputForLLMJudge,
 } from '@mastra/evals/scorers/utils';
 import { getWorktreeDiffSync } from '#integrations/git';
-import { getMainModel } from '#mastra/model';
+import { getModel } from '#mastra/model';
 import { getCurrentWorktreePath } from '#utils/worktree-context';
 
-export const judgeModel: LanguageModelV3 = getMainModel('judge');
+export const judgeModel: LanguageModelV3 = getModel('judge');
 
 export const judgeConfig: {
   model: LanguageModelV3;
@@ -193,14 +193,6 @@ export function collectToolNames(
 
     if ('toolName' in node && typeof (node as { toolName?: JsonValue }).toolName === 'string') {
       names.add((node as { toolName: string }).toolName);
-    }
-
-    if (
-      'toolCallId' in node &&
-      'name' in node &&
-      typeof (node as { name?: JsonValue }).name === 'string'
-    ) {
-      names.add((node as { name: string }).name);
     }
 
     if (Array.isArray(node)) {
