@@ -7,7 +7,8 @@ import { getEmbeddingModel, getModel } from '../model';
 import { agentsMdProcessor } from '../processors/agents-md';
 import { ToolBudgetProcessor } from '../processors/tool-budget';
 import { storage, vector } from '../storage';
-import { fileReadTool, globSearchTool, listDirTool } from '../tools/index';
+import { globSearchTool } from '../tools/index';
+import { createWorktreeWorkspace } from '../workspace';
 
 const env = getEnv();
 
@@ -16,20 +17,22 @@ export const architectAgent = new Agent({
   name: 'architect',
   instructions: ARCHITECT_SYSTEM_PROMPT,
   model: getModel('architect'),
+  // Workspace auto-injects read-only FS tools (readFile, listDir) resolved
+  // per-request to the current git worktree.
+  workspace: createWorktreeWorkspace(),
   inputProcessors: [
     agentsMdProcessor,
     new ToolBudgetProcessor({
       maxSteps: env.MAX_STEPS_AGENT_ARCHITECT,
       toolBudgets: {
-        listDir: 1,
-        globSearch: 2,
-        readFile: 5,
+        listDir: 1, // mastra_workspace_list_files
+        readFile: 5, // mastra_workspace_read_file
+        globSearch: 2, // custom globSearch
       },
     }),
   ],
   tools: {
-    readFile: fileReadTool,
-    listDir: listDirTool,
+    // Only custom tools remain; readFile/listDir come from workspace
     globSearch: globSearchTool,
   },
   defaultOptions: {

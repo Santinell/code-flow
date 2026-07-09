@@ -3,8 +3,9 @@ import { getEnv } from '#config/env';
 import { developerAgent } from '#mastra/agents/developer-agent';
 import {
   developerImplementationOutputSchema,
-  developerAnalysisOutputSchema,
+  developerInstallDepsOutputSchema,
 } from '#mastra/workflows/developer-workflow.types';
+import { buildWorkspaceRequestContext } from '#mastra/workspace';
 import { createAgentStepLogger } from '#utils/agent-step-logger';
 import { createLogger } from '#utils/logger';
 import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
@@ -31,7 +32,7 @@ Testing is handled by a separate workflow step — do not try to run tests.
 
 export const implementStep = createStep({
   id: 'implement',
-  inputSchema: developerAnalysisOutputSchema,
+  inputSchema: developerInstallDepsOutputSchema,
   outputSchema: developerImplementationOutputSchema,
   execute: async ({ inputData }) => {
     const worktreePath = getWorktreePath(inputData.branchName);
@@ -53,6 +54,7 @@ Implement the changes now. Read files you need to modify, then write the impleme
         instructions: IMPLEMENT_INSTRUCTIONS,
         maxSteps: env.MAX_STEPS_IMPLEMENT,
         activeTools: ['readFile', 'writeFile'],
+        requestContext: buildWorkspaceRequestContext(worktreePath),
         onStepFinish: (payload) => stepLog.logStepFinish(inputData.taskIdentifier, payload),
       });
     });

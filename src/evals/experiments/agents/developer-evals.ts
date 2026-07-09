@@ -44,7 +44,7 @@ async function setupSandbox(lang: EvalLanguage): Promise<string> {
   const config = LANGUAGE_CONFIGS[lang];
   const fixturePath = path.join(
     import.meta.dirname,
-    `../../../../../eval-fixtures/${config.fixtureDir}`
+    `../../../../eval-fixtures/${config.fixtureDir}`
   );
   const sandboxPath = path.join(os.tmpdir(), `${DEVELOPER_SANDBOX_PREFIX}${lang}-${Date.now()}`);
 

@@ -5,7 +5,7 @@ import { REVIEWER_SYSTEM_PROMPT } from '#config/prompts';
 import { getModel } from '../model';
 import { agentsMdProcessor } from '../processors/agents-md';
 import { ToolBudgetProcessor } from '../processors/tool-budget';
-import { fileReadTool } from '../tools/index';
+import { createWorktreeWorkspace } from '../workspace';
 
 const env = getEnv();
 
@@ -14,18 +14,18 @@ export const reviewerAgent = new Agent({
   name: 'reviewer',
   instructions: REVIEWER_SYSTEM_PROMPT,
   model: getModel('reviewer'),
+  // Workspace auto-injects readFile (resolved per-request to the worktree).
+  workspace: createWorktreeWorkspace(),
   inputProcessors: [
     agentsMdProcessor,
     new ToolBudgetProcessor({
       maxSteps: env.MAX_STEPS_AGENT_REVIEWER,
       toolBudgets: {
-        readFile: 3,
+        readFile: 3, // mastra_workspace_read_file
       },
     }),
   ],
-  tools: {
-    readFile: fileReadTool,
-  },
+  tools: {}, // all tools come from workspace
   defaultOptions: {
     maxSteps: env.MAX_STEPS_AGENT_REVIEWER,
     modelSettings: {

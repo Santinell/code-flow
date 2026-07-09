@@ -10,6 +10,7 @@ import {
   reviewerDiffOutputSchema,
   reviewerGenerateOutputSchema,
 } from '#mastra/workflows/reviewer-workflow.types';
+import { buildWorkspaceRequestContext } from '#mastra/workspace';
 import { createLogger } from '#utils/logger';
 import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
 
@@ -65,6 +66,7 @@ You cannot run commands or modify anything — only read and analyze.`;
           maxRetries: 3,
           maxOutputTokens: env.MAX_OUTPUT_TOKENS_REVIEWER,
         },
+        requestContext: buildWorkspaceRequestContext(worktreePath),
         returnScorerData: true,
       });
     });

@@ -17,7 +17,37 @@ export const developerBranchOutputSchema = developerClaimTaskOutputSchema.extend
   branchCreated: z.boolean(),
 });
 
-export const developerInstallDepsOutputSchema = developerBranchOutputSchema.extend({
+/**
+ * Stack detection result produced by the analyze-codebase step.
+ *
+ * The agent explores the project manifests and reports these in structured
+ * output. For known stacks (node/python/make) detectProjectStack overrides
+ * the agent's commands with the tested deterministic ones; for unknown stacks
+ * the LLM-provided commands are used (after validation by command-security).
+ */
+export const stackCommandsSchema = z.object({
+  analysis: z.string().describe('Concrete findings about language, framework, and test runner'),
+  detectedLanguage: z.string().describe('Primary language, e.g. "typescript", "python", "rust"'),
+  installCommands: z
+    .array(z.string())
+    .describe(
+      'Install commands as full strings (e.g. ["uv sync"], ["cargo fetch"]). Empty array if no install needed.'
+    ),
+  testCommand: z
+    .string()
+    .nullable()
+    .describe('Test command (e.g. "cargo test", "go test ./..."). null if no tests.'),
+});
+export type StackCommands = z.infer<typeof stackCommandsSchema>;
+
+// NOTE: analyze-codebase runs BEFORE install-deps now, so the schema chain is
+// branch → analysis → installDeps (analysis determines the install commands).
+export const developerAnalysisOutputSchema = developerBranchOutputSchema.extend({
+  codebaseAnalysis: z.string(),
+  stackCommands: stackCommandsSchema,
+});
+
+export const developerInstallDepsOutputSchema = developerAnalysisOutputSchema.extend({
   installResult: z.object({
     command: z.string(),
     stdout: z.string(),
@@ -27,10 +57,6 @@ export const developerInstallDepsOutputSchema = developerBranchOutputSchema.exte
     skipped: z.boolean(),
     manager: z.string().nullable(),
   }),
-});
-
-export const developerAnalysisOutputSchema = developerInstallDepsOutputSchema.extend({
-  codebaseAnalysis: z.string(),
 });
 
 export const developerImplementationOutputSchema = developerAnalysisOutputSchema.extend({

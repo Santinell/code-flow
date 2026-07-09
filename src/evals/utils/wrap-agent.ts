@@ -1,6 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
+import { WORKTREE_PATH_CONTEXT_KEY } from '#mastra/workspace';
 import { createLogger } from '#utils/logger';
 import { runInWorktree } from '#utils/worktree-context';
 
@@ -34,11 +35,15 @@ function hasRetryableStructuredOutputError(schema: z.ZodSchema, result: Generate
   return !parsed.success;
 }
 
+// generate()'s overloads collapse Parameters to a 1-tuple, so we restate the
+// call shape we actually depend on (prompt + optional options object).
+type GeneratePrompt = GenerateArgs[0];
 type GenerateOptions = {
   requestContext?: RequestContext;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
 };
-
-type GenerateArgsWithOptions = [GenerateArgs[0], GenerateOptions?];
+type GenerateArgsRest = [prompt: GeneratePrompt, options?: GenerateOptions];
 
 /**
  * Wraps a Mastra Agent so that `generate()` transparently retries when the
@@ -62,11 +67,30 @@ export function wrapAgent<TAgent extends Agent>(agent: TAgent, options: WrapAgen
 
   const generate = async (...args: GenerateArgs): Promise<GenerateResult> => {
     let lastResult: GenerateResult | undefined;
-    const [, generateOptions] = args as GenerateArgsWithOptions;
+    const [generatePrompt, generateOptions] = args as GenerateArgsRest;
     const worktreePath = options.getWorktreePath(generateOptions?.requestContext);
 
+    // Inject the worktree path into requestContext so the resolver-backed
+    // workspace filesystem resolves to the correct sandbox/worktree. Merges
+    // with any existing requestContext from the caller (evals may set their
+    // own keys). Custom tools (globSearch, moveFile) still resolve via the
+    // runInWorktree AsyncLocalStorage set below — both channels point at the
+    // same worktree, so they stay consistent.
+    let effectiveRequestContext = generateOptions?.requestContext;
+    if (worktreePath) {
+      effectiveRequestContext = effectiveRequestContext
+        ? new RequestContext(effectiveRequestContext.entries())
+        : new RequestContext();
+      effectiveRequestContext.set(WORKTREE_PATH_CONTEXT_KEY, worktreePath);
+    }
+
+    const effectiveOptions = {
+      ...generateOptions,
+      requestContext: effectiveRequestContext,
+    };
+
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const runGenerate = () => agent.generate(...args);
+      const runGenerate = () => agent.generate(generatePrompt, effectiveOptions);
       const result = await (worktreePath
         ? runInWorktree(worktreePath, runGenerate)
         : runGenerate());

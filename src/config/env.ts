@@ -72,6 +72,15 @@ const envSchema = z
     MAX_CONCURRENT_REVIEWER_TASKS: z.coerce.number().int().min(1).default(1),
     MAX_CONCURRENT_EVAL: z.coerce.number().int().min(1).default(1),
 
+    // Additional binaries allowed in LLM-derived install/test commands (unknown
+    // stacks only; known stacks use the tested deterministic builders in exec.ts).
+    // Supplements the built-in allowlist in command-security.ts — cannot remove
+    // the builtin entries, only extend them. Comma-separated, e.g. "dvc,just".
+    ALLOWED_BINARIES: z
+      .string()
+      .optional()
+      .describe('Comma-separated extra binaries allowed in agent-derived commands'),
+
     // Embedding
     EMBEDDING_MEMORY: z.coerce.boolean().default(false),
 

@@ -26,8 +26,8 @@ export const developerWorkflow = createWorkflow({
 })
   .then(claimTaskStep)
   .then(createBranchStep)
-  .then(installDepsStep)
   .then(analyzeCodebaseStep)
+  .then(installDepsStep)
   .then(implementStep)
   .then(runTestsStep)
   .branch([

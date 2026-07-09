@@ -1,5 +1,6 @@
 import { createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { getEnv } from '#config/env';
 import * as telegram from '#integrations/telegram';
 import { architectAgent } from '#mastra/agents/architect-agent';
 import {
@@ -7,6 +8,7 @@ import {
   architectParseTasksOutputSchema,
   architectWorkflowInputSchema,
 } from '#mastra/workflows/architect-workflow.types';
+import { buildWorkspaceRequestContext } from '#mastra/workspace';
 import { createLogger } from '#utils/logger';
 
 const log = createLogger('analyze-requirements-step');
@@ -39,6 +41,9 @@ export const analyzeRequirements = createStep({
       structuredOutput: {
         schema: architectGenerateOutputSchema,
       },
+      // Architect analyzes the main project (no worktree yet — design happens
+      // before any branch/task exists). Workspace FS resolves to PROJECT_PATH.
+      requestContext: buildWorkspaceRequestContext(getEnv().PROJECT_PATH),
     });
     const output = result.object;
 

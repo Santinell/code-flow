@@ -5,6 +5,7 @@ import {
   developerFixStepOutputSchema,
   developerRunTestsOutputSchema,
 } from '#mastra/workflows/developer-workflow.types';
+import { buildWorkspaceRequestContext } from '#mastra/workspace';
 import { createAgentStepLogger } from '#utils/agent-step-logger';
 import { createLogger } from '#utils/logger';
 import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
@@ -60,6 +61,7 @@ Fix the failures now. Read the failing files, edit them with writeFile, and re-r
         instructions: FIX_INSTRUCTIONS,
         maxSteps: env.MAX_STEPS_FIX,
         activeTools: ['readFile', 'writeFile'],
+        requestContext: buildWorkspaceRequestContext(worktreePath),
         onStepFinish: (payload) => stepLog.logStepFinish(inputData.taskIdentifier, payload),
       });
     });

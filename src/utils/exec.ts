@@ -1,3 +1,4 @@
+import type { ParsedCommand } from './command-security';
 import { execa } from 'execa';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,7 +80,7 @@ export function detectProjectStack(projectRoot: string): ProjectStack | null {
 //  Command builders per language
 // ════════════════════════════════════════════════════════════════════
 
-function buildTestCommand(
+export function buildTestCommand(
   stack: ProjectStack,
   filter?: string
 ): { command: string; args: string[] } {
@@ -105,7 +106,7 @@ function buildTestCommand(
 
 // Возвращает последовательность команд install. Большинство стеков — одна
 // команда; uv-pip (bare requirements.txt) — две: создать venv + поставить.
-function buildInstallCommand(stack: ProjectStack): { command: string; args: string[] }[] {
+export function buildInstallCommand(stack: ProjectStack): { command: string; args: string[] }[] {
   if (stack.language === 'node') {
     return [{ command: stack.manager, args: ['install'] }];
   }
@@ -148,6 +149,76 @@ export async function execInDir(
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
     exitCode: result.exitCode ?? 0,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Generic command execution (for LLM-derived commands on unknown stacks)
+//
+//  These run pre-validated commands (see command-security.ts) without going
+//  through detectProjectStack. They exist alongside the stack-aware
+//  install/test helpers so the known-stack path stays untouched and tested.
+// ════════════════════════════════════════════════════════════════════
+
+export interface CommandRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  passed: boolean;
+  command: string;
+}
+
+/**
+ * Runs a single command in cwd via execa({ shell: false }). The caller must
+ * have already validated the command via validateCommand().
+ */
+export async function runSingleCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeout = 120_000
+): Promise<CommandRunResult> {
+  const result = await execInDir(command, args, cwd, timeout);
+  return {
+    ...result,
+    passed: result.exitCode === 0,
+    command: `${command} ${args.join(' ')}`.trim(),
+  };
+}
+
+/**
+ * Runs a sequence of commands in order, stopping at the first failure.
+ * Used for multi-step installs (e.g. `uv venv` then `uv pip install ...`)
+ * derived from the analyze step's structured output. Each command must be
+ * pre-validated via validateCommand().
+ */
+export async function runCommandSequence(
+  commands: ParsedCommand[],
+  cwd: string,
+  timeout = 300_000
+): Promise<CommandRunResult> {
+  let stdout = '';
+  let stderr = '';
+  let exitCode = 0;
+
+  for (const { command, args } of commands) {
+    const result = await execInDir(command, args, cwd, timeout);
+    stdout += result.stdout;
+    stderr += result.stderr;
+    exitCode = result.exitCode;
+    if (exitCode !== 0) {
+      break; // mirrors installProjectDependencies: stop on first failure
+    }
+  }
+
+  const commandLabel = commands.map((c) => `${c.command} ${c.args.join(' ')}`).join(' && ');
+
+  return {
+    stdout,
+    stderr,
+    exitCode,
+    passed: exitCode === 0,
+    command: commandLabel,
   };
 }
 

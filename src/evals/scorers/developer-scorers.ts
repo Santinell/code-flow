@@ -1,6 +1,13 @@
 import { createScorer, type MastraScorers, type ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { Tool } from '@mastra/core/tools';
 import {
+  deleteFileTool,
+  editFileTool,
+  listFilesTool,
+  readFileTool,
+  writeFileTool,
+} from '@mastra/core/workspace';
+import {
   createHallucinationScorer,
   createToolCallAccuracyScorerLLM,
 } from '@mastra/evals/scorers/prebuilt';
@@ -11,15 +18,7 @@ import {
 } from '@mastra/evals/scorers/utils';
 import { z } from 'zod';
 import path from 'node:path';
-import {
-  fileDeleteTool,
-  fileMoveTool,
-  fileReadTool,
-  fileWriteTool,
-  listDirTool,
-  globSearchTool,
-  installDepsTool,
-} from '#mastra/tools/index';
+import { fileMoveTool, globSearchTool } from '#mastra/tools/index';
 import { getCurrentWorktreePath } from '#utils/worktree-context';
 import {
   collectToolNames,
@@ -29,21 +28,36 @@ import {
   judgeModel,
 } from './shared';
 
+// Tool names the developer agent may legitimately call. Includes both the
+// short aliases (readFile, writeFile…) and the native workspace IDs
+// (mastra_workspace_*) plus the custom tool names (globSearch, moveFile).
 const DEVELOPER_ALLOWED_TOOL_NAMES = new Set([
+  // Workspace tool aliases
   'readFile',
   'writeFile',
   'deleteFile',
-  'moveFile',
   'listDir',
+  'editFile',
+  'mkdir',
+  'fileStat',
+  // Custom tools
+  'moveFile',
   'globSearch',
-  'installDeps',
+  // Native workspace IDs (in case the alias isn't applied in a run)
+  'mastra_workspace_read_file',
+  'mastra_workspace_write_file',
+  'mastra_workspace_delete',
+  'mastra_workspace_list_files',
+  'mastra_workspace_edit_file',
+  'mastra_workspace_mkdir',
+  'mastra_workspace_file_stat',
+  // Legacy custom tool IDs (kept for eval backward-compat)
   'file-read',
   'file-write',
   'file-delete',
   'file-move',
   'list-dir',
   'glob-search',
-  'install-deps',
 ]);
 
 const ABSOLUTE_PATH_PATTERN =
@@ -437,13 +451,13 @@ export const developerToolCallAccuracyScorer = enableJsonPromptInjection(
   createToolCallAccuracyScorerLLM({
     model: judgeModel,
     availableTools: [
-      fileReadTool,
-      fileWriteTool,
-      fileDeleteTool,
+      readFileTool,
+      writeFileTool,
+      deleteFileTool,
+      editFileTool,
+      listFilesTool,
       fileMoveTool,
-      listDirTool,
       globSearchTool,
-      installDepsTool,
     ] as Tool[],
   })
 );
