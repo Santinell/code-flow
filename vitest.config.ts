@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    exclude: ['node_modules', 'dist', 'eval-fixtures/**'],
+    exclude: ['node_modules', 'dist', 'eval-fixtures/**', 'src/test/**'],
+    setupFiles: ['./src/test/setup.ts'],
   },
 });

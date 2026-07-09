@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  ensureToolAvailable,
+  getInstallHint,
+  hasPep621Metadata,
+  isToolAvailable,
+} from './tool-availability';
 
 const mockExeca = vi.fn();
+const mockExecaSync = vi.fn();
 vi.mock('execa', () => ({
   execa: (...args: [string, string[], object]) => mockExeca(...args),
+  execaSync: (...args: [string, string[], object]) => mockExecaSync(...args),
 }));
-
-const { ensureToolAvailable, getInstallHint, hasPep621Metadata, isToolAvailable } =
-  await import('./tool-availability.js');
 
 describe('isToolAvailable', () => {
   beforeEach(() => {

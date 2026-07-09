@@ -1,11 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
-import * as git from '../../../integrations/git.js';
-import * as linear from '../../../integrations/linear.js';
-import { createLogger } from '../../../utils/logger.js';
+import { getTicketSystemConfig } from '#config/providers';
+import * as git from '#integrations/git';
+import { getTicketProvider } from '#integrations/ticket/index';
 import {
   reviewerHandleResultOutputSchema,
   reviewerReviewOutputSchema,
-} from '../../workflows/reviewer.workflow.types.js';
+} from '#mastra/workflows/reviewer-workflow.types';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('handle-review-result-step');
 
@@ -14,11 +15,14 @@ export const handleReviewResultStep = createStep({
   inputSchema: reviewerReviewOutputSchema,
   outputSchema: reviewerHandleResultOutputSchema,
   execute: async ({ inputData }) => {
+    const ticketSystem = getTicketProvider();
+    const { statuses } = getTicketSystemConfig();
+
     if (inputData.isApproved) {
-      await linear.updateTaskStatus(inputData.taskId, 'Done');
-      await linear.addComment(
+      await ticketSystem.updateTaskStatus(inputData.taskId, statuses.done);
+      await ticketSystem.addComment(
         inputData.taskId,
-        `✅ **Code Review Approved**\n\n${inputData.reviewText}`
+        `**Code Review Approved**\n\n${inputData.reviewText}`
       );
 
       try {
@@ -26,9 +30,9 @@ export const handleReviewResultStep = createStep({
         log.info({ taskIdentifier: inputData.taskIdentifier }, 'Branch merged');
       } catch (error) {
         log.warn({ taskIdentifier: inputData.taskIdentifier, error }, 'Merge failed');
-        await linear.addComment(
+        await ticketSystem.addComment(
           inputData.taskId,
-          `⚠️ Auto-merge failed. Please merge manually: \`${inputData.branchName}\``
+          `Auto-merge failed. Please merge manually: \`${inputData.branchName}\``
         );
       }
 
@@ -39,10 +43,10 @@ export const handleReviewResultStep = createStep({
       };
     }
 
-    await linear.updateTaskStatus(inputData.taskId, 'Todo');
-    await linear.addComment(
+    await ticketSystem.updateTaskStatus(inputData.taskId, statuses.todo);
+    await ticketSystem.addComment(
       inputData.taskId,
-      `🔄 **Changes Requested**\n\n${inputData.reviewText}`
+      `**Changes Requested**\n\n${inputData.reviewText}`
     );
 
     log.info({ taskIdentifier: inputData.taskIdentifier }, 'Changes requested');

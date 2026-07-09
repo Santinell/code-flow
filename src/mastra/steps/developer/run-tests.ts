@@ -1,11 +1,11 @@
 import { createStep } from '@mastra/core/workflows';
-import { runProjectTests } from '../../../utils/exec.js';
-import { createLogger } from '../../../utils/logger.js';
-import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
 import {
   developerImplementationOutputSchema,
   developerRunTestsOutputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { runProjectTests } from '#utils/exec';
+import { createLogger } from '#utils/logger';
+import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
 
 const log = createLogger('run-tests-step');
 

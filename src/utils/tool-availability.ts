@@ -1,7 +1,7 @@
 import { execa } from 'execa';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createLogger } from './logger.js';
+import { createLogger } from './logger';
 
 const log = createLogger('tool-availability');
 

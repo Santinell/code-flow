@@ -1,13 +1,13 @@
 import { createStep } from '@mastra/core/workflows';
-import { getEnv } from '../../../config/env.js';
-import { createAgentStepLogger } from '../../../utils/agent-step-logger.js';
-import { createLogger } from '../../../utils/logger.js';
-import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
-import { developerAgent } from '../../agents/developer.agent.js';
+import { getEnv } from '#config/env';
+import { developerAgent } from '#mastra/agents/developer-agent';
 import {
   developerAnalysisOutputSchema,
   developerInstallDepsOutputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { createAgentStepLogger } from '#utils/agent-step-logger';
+import { createLogger } from '#utils/logger';
+import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
 
 const env = getEnv();
 const log = createLogger('analyze-codebase-step');

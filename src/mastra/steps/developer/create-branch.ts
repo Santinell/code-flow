@@ -1,10 +1,10 @@
 import { createStep } from '@mastra/core/workflows';
-import * as git from '../../../integrations/git.js';
-import { createLogger } from '../../../utils/logger.js';
+import * as git from '#integrations/git';
 import {
   developerBranchOutputSchema,
   developerClaimTaskOutputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('create-branch-step');
 

@@ -48,21 +48,18 @@ pnpm start
 
 # Or run individual triggers
 pnpm trigger:architect   # Telegram/Architect only
-pnpm trigger:poller      # Linear polling only (Developer + Reviewer)
+pnpm trigger:poller      # Ticket polling only (Developer + Reviewer)
 ```
 
 ## Environment Variables
 
 See `.env.example` for the full list. Main key variables:
 
-| Variable              | Description                         |
-| --------------------- | ----------------------------------- |
-| `TELEGRAM_BOT_TOKEN`  | Telegram bot token                  |
-| `LINEAR_API_KEY`      | Linear API key                      |
-| `LINEAR_TEAM_KEY`     | Linear team key for task creation   |
-| `LINEAR_PROJECT_SLUG` | Linear project slug                 |
-| `PROJECT_PATH`        | Path to target project              |
-| `WORKTREE_PATH`       | Path to worktrees (should be empty) |
+| Variable             | Description                         |
+| -------------------- | ----------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token                  |
+| `PROJECT_PATH`       | Path to target project              |
+| `WORKTREE_PATH`      | Path to worktrees (should be empty) |
 
 ## Evaluation
 

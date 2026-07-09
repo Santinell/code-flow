@@ -1,13 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
-import { getEnv } from '../../../config/env.js';
-import * as linear from '../../../integrations/linear.js';
-import { createLogger } from '../../../utils/logger.js';
+import { getTicketSystemConfig } from '#config/providers';
+import { getTicketProvider } from '#integrations/ticket/index';
 import {
   developerClaimTaskOutputSchema,
   developerWorkflowInputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { createLogger } from '#utils/logger';
 
-const env = getEnv();
 const log = createLogger('claim-task-step');
 
 export const claimTaskStep = createStep({
@@ -15,7 +14,10 @@ export const claimTaskStep = createStep({
   inputSchema: developerWorkflowInputSchema,
   outputSchema: developerClaimTaskOutputSchema,
   execute: async ({ inputData }) => {
-    await linear.updateTaskStatus(inputData.taskId, env.LINEAR_STATUS_IN_PROGRESS);
+    const ticketSystem = getTicketProvider();
+    const { statuses } = getTicketSystemConfig();
+
+    await ticketSystem.updateTaskStatus(inputData.taskId, statuses.inProgress);
 
     log.info(
       {
@@ -26,6 +28,6 @@ export const claimTaskStep = createStep({
       'Task claimed'
     );
 
-    return { ...inputData, status: env.LINEAR_STATUS_IN_PROGRESS };
+    return { ...inputData, status: statuses.inProgress };
   },
 });

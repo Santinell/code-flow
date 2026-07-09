@@ -1,13 +1,13 @@
 import { createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import * as telegram from '../../../integrations/telegram.js';
-import { createLogger } from '../../../utils/logger.js';
-import { architectAgent } from '../../agents/architect.agent.js';
+import * as telegram from '#integrations/telegram';
+import { architectAgent } from '#mastra/agents/architect-agent';
 import {
   architectGenerateOutputSchema,
   architectParseTasksOutputSchema,
   architectWorkflowInputSchema,
-} from '../../workflows/architect.workflow.types.js';
+} from '#mastra/workflows/architect-workflow.types';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('analyze-requirements-step');
 

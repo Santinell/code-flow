@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import { createLogger } from '../utils/logger.js';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('db');
 

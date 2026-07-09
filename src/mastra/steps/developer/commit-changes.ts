@@ -1,12 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
-import * as git from '../../../integrations/git.js';
-import { createLogger } from '../../../utils/logger.js';
-import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
+import * as git from '#integrations/git';
 import {
   developerCommitInputSchema,
   developerCommitOutputSchema,
   parseDeveloperCommitInput,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { createLogger } from '#utils/logger';
+import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
 
 const log = createLogger('commit-changes-step');
 

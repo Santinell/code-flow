@@ -3,9 +3,9 @@ import fg from 'fast-glob';
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
-import { installProjectDependencies, runProjectTests } from '../../utils/exec.js';
-import { createLogger } from '../../utils/logger.js';
-import { validatePath } from '../../utils/path-security.js';
+import { installProjectDependencies, runProjectTests } from '#utils/exec';
+import { createLogger } from '#utils/logger';
+import { validatePath } from '#utils/path-security';
 
 const log = createLogger('agent-tools');
 

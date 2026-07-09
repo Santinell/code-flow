@@ -1,5 +1,5 @@
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { getEnv } from '../config/env.js';
+import { getEnv } from '#config/env';
 
 const env = getEnv();
 

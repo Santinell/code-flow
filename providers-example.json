@@ -1,5 +1,5 @@
 {
-  "providers": {
+  "ai-providers": {
     "deepseek": {
       "mode": "deepseek",
       "baseUrl": "https://api.deepseek.com/v1",
@@ -79,6 +79,28 @@
       "provider": "embedding-ollama",
       "model": "embeddinggemma",
       "dimensions": 768
+    }
+  },
+  "ticket-providers": {
+    "linear": {
+      "apiKey": "",
+      "teamKey": "",
+      "projectSlug": ""
+    },
+    "github": {
+      "token": "",
+      "owner": "",
+      "repo": "",
+      "projectNumber": 0
+    }
+  },
+  "ticket-system": {
+    "provider": "linear",
+    "statuses": {
+      "todo": "Todo",
+      "inProgress": "In Progress",
+      "review": "In Review",
+      "done": "Done"
     }
   }
 }

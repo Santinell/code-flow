@@ -5,7 +5,7 @@ import {
   LEGACY_POETRY_V1_ERROR,
   ensureToolAvailable,
   hasPep621Metadata,
-} from './tool-availability.js';
+} from './tool-availability';
 
 // ════════════════════════════════════════════════════════════════════
 //  Project stack detection (language + package manager)
@@ -73,13 +73,6 @@ export function detectProjectStack(projectRoot: string): ProjectStack | null {
   }
 
   return null;
-}
-
-/**
- * @deprecated Используйте detectProjectStack(). Backward-compat обёртка.
- */
-export function detectPackageManager(projectRoot: string): string | null {
-  return detectProjectStack(projectRoot)?.manager ?? null;
 }
 
 // ════════════════════════════════════════════════════════════════════

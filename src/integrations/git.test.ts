@@ -9,24 +9,8 @@ const mockLogger = {
   debug: vi.fn(),
 };
 
-vi.mock('../config/env.js', () => ({
-  getEnv: () => ({
-    PROJECT_PATH: '/home/user/project',
-    WORKTREE_PATH: '/home/user/worktrees',
-    GIT_MAIN_BRANCH: 'main',
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@test.local',
-  }),
-}));
-
-vi.mock('../utils/logger.js', () => ({
+vi.mock('#utils/logger', () => ({
   createLogger: () => mockLogger,
-}));
-
-vi.mock('../utils/worktree-context.js', () => ({
-  getCurrentWorktreePath: () => '/home/user/project',
-  getWorktreePath: (branch: string) => `/home/user/worktrees/${branch}`,
-  runInWorktree: (_path: string, fn: () => Promise<never>) => fn(),
 }));
 
 // Мокаем node:fs — git.ts использует existsSync и join
@@ -87,7 +71,7 @@ describe('getWorktreeDiffSync', () => {
   it('returns empty string when .git does not exist', () => {
     mockExistsSync.mockReturnValue(false);
 
-    const result = getWorktreeDiffSync('/home/user/worktrees/no-git');
+    const result = getWorktreeDiffSync('/tmp/__test_worktrees__/no-git');
     expect(result).toBe('');
     // execaSync НЕ должен вызываться
     expect(mockExecaSync).not.toHaveBeenCalled();
@@ -102,13 +86,13 @@ describe('getWorktreeDiffSync', () => {
       stderr: '',
     });
 
-    const result = getWorktreeDiffSync('/home/user/worktrees/feat-1');
+    const result = getWorktreeDiffSync('/tmp/__test_worktrees__/feat-1');
     expect(result).toContain('--- a/file.ts');
     expect(mockExecaSync).toHaveBeenCalledWith(
       'git',
       ['diff', '--unified=3', 'HEAD'],
       expect.objectContaining({
-        cwd: '/home/user/worktrees/feat-1',
+        cwd: '/tmp/__test_worktrees__/feat-1',
         timeout: 5000,
       })
     );
@@ -121,10 +105,10 @@ describe('getWorktreeDiffSync', () => {
       throw error;
     });
 
-    const result = getWorktreeDiffSync('/home/user/worktrees/broken');
+    const result = getWorktreeDiffSync('/tmp/__test_worktrees__/broken');
     expect(result).toBe('');
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      { worktreePath: '/home/user/worktrees/broken', error },
+      { worktreePath: '/tmp/__test_worktrees__/broken', error },
       'Failed to compute worktree diff'
     );
   });
@@ -136,7 +120,7 @@ describe('getWorktreeDiffSync', () => {
       stderr: '',
     });
 
-    const result = getWorktreeDiffSync('/home/user/worktrees/clean');
+    const result = getWorktreeDiffSync('/tmp/__test_worktrees__/clean');
     expect(result).toBe('');
     // warn не вызывается — пустой diff это норма
     expect(mockLogger.warn).not.toHaveBeenCalled();

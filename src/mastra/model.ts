@@ -11,21 +11,19 @@ import {
   type DeepSeekProvider,
 } from '@ai-sdk/deepseek';
 import { createOpenAI, type OpenAIProviderSettings, type OpenAIProvider } from '@ai-sdk/openai';
-// import { createZhipu, type ZhipuProviderSettings, type ZhipuProvider } from 'zhipu-ai-provider';
 import { createOllama, OllamaProvider, OllamaProviderSettings } from 'ollama-ai-provider-v2';
 import {
   getAgentMainEntry,
   getAgentModelEntries,
   getProviderConfig,
   type ModelEntry,
-  type ProviderConfig,
-} from '../config/providers.js';
+  type AiProviderConfig,
+} from '#config/providers';
 
 let openaiProvider: OpenAIProvider | null = null;
 let deepseekProvider: DeepSeekProvider | null = null;
 let anthropicProvider: AnthropicProvider | null = null;
 let ollamaProvider: OllamaProvider | null = null;
-// let zhipuProvider: ZhipuProvider | null = null;
 
 type getEmbeddingModelOptions = Omit<OllamaProviderSettings, 'baseURL'>;
 
@@ -33,10 +31,9 @@ type getModelOptions =
   | Omit<AnthropicProviderSettings, 'apiKey' | 'baseURL'>
   | Omit<OpenAIProviderSettings, 'apiKey' | 'baseURL'>
   | Omit<DeepSeekProviderSettings, 'apiKey' | 'baseURL'>;
-  // | Omit<ZhipuProviderSettings, 'apiKey' | 'baseURL'>;
 
 function createLanguageModel(
-  config: ProviderConfig,
+  config: AiProviderConfig,
   modelName: string,
   options?: getModelOptions
 ): LanguageModelV3 {
@@ -73,12 +70,6 @@ function createLanguageModel(
       }
       return ollamaProvider.chat(modelName);
     }
-    // case 'z-ai': {
-    //   if (!zhipuProvider) {
-    //     zhipuProvider = createZhipu({ apiKey, baseURL, ...options });
-    //   }
-    //   return zhipuProvider.chat(modelName);
-    // }
     default: {
       throw new Error(`Unknown provider mode: ${mode}`);
     }
@@ -86,7 +77,7 @@ function createLanguageModel(
 }
 
 function createEmbeddingModel(
-  config: ProviderConfig,
+  config: AiProviderConfig,
   modelName: string,
   dimensions: number,
   options?: getEmbeddingModelOptions

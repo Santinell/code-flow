@@ -1,18 +1,18 @@
 import { Mastra } from '@mastra/core';
-import { architectAgent } from './agents/architect.agent.js';
-import { developerAgent } from './agents/developer.agent.js';
-import { reviewerAgent } from './agents/reviewer.agent.js';
 import {
   architectScorerRegistry,
   developerScorerRegistry,
   reviewerScorerRegistry,
   stepScorerRegistry,
   trajectoryScorerRegistry,
-} from './evals/scorers/index.js';
-import { storage } from './storage.js';
-import { architectWorkflow } from './workflows/architect.workflow.js';
-import { developerWorkflow } from './workflows/developer.workflow.js';
-import { reviewerWorkflow } from './workflows/reviewer.workflow.js';
+} from '#evals/scorers/index';
+import { architectAgent } from './agents/architect-agent';
+import { developerAgent } from './agents/developer-agent';
+import { reviewerAgent } from './agents/reviewer-agent';
+import { storage } from './storage';
+import { architectWorkflow } from './workflows/architect-workflow';
+import { developerWorkflow } from './workflows/developer-workflow';
+import { reviewerWorkflow } from './workflows/reviewer-workflow';
 
 export const mastra = new Mastra({
   storage,

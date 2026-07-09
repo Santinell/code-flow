@@ -1,10 +1,10 @@
 import { createStep } from '@mastra/core/workflows';
-import * as git from '../../../integrations/git.js';
-import { createLogger } from '../../../utils/logger.js';
+import * as git from '#integrations/git';
 import {
   reviewerDiffOutputSchema,
   reviewerWorkflowInputSchema,
-} from '../../workflows/reviewer.workflow.types.js';
+} from '#mastra/workflows/reviewer-workflow.types';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('get-diff-step');
 

@@ -1,5 +1,5 @@
 import type { LLMStepResult } from '@mastra/core/agent';
-import { createLogger } from './logger.js';
+import { createLogger } from './logger';
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonObject | JsonArray;

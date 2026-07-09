@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { getEnv } from '../config/env.js';
+import { getEnv } from '#config/env';
 
 const env = getEnv();
 const currentWorktreeStorage = new AsyncLocalStorage<string>();

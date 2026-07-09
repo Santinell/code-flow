@@ -4,6 +4,7 @@ dist
 .kilo
 .env
 .codex
+.zcode
 tmp
 *.db
 *.db-shm

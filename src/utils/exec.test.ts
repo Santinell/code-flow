@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { detectProjectStack, installProjectDependencies, runProjectTests } from './exec';
 
 // exec.ts не импортирует env/logger, но импортирует execa — мокаем его
 const mockExeca = vi.fn();
@@ -17,59 +18,6 @@ vi.mock('./tool-availability.js', () => ({
   hasPep621Metadata: (...args: [string]) => mockHasPep621(...args),
   LEGACY_POETRY_V1_ERROR: 'LEGACY_POETRY_V1_ERROR_PLACEHOLDER',
 }));
-
-const { detectPackageManager, detectProjectStack, installProjectDependencies, runProjectTests } =
-  await import('./exec.js');
-
-describe('detectPackageManager', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join('/tmp', 'cf-exec-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('detects pnpm (highest priority)', () => {
-    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    expect(detectPackageManager(tmpDir)).toBe('pnpm');
-  });
-
-  it('detects npm when pnpm lock is absent', () => {
-    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '');
-    expect(detectPackageManager(tmpDir)).toBe('npm');
-  });
-
-  it('detects yarn when npm and pnpm locks are absent', () => {
-    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    expect(detectPackageManager(tmpDir)).toBe('yarn');
-  });
-
-  it('detects bun when only bun lockb exists', () => {
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    expect(detectPackageManager(tmpDir)).toBe('bun');
-  });
-
-  it('falls back to make when only Makefile exists', () => {
-    fs.writeFileSync(path.join(tmpDir, 'Makefile'), '');
-    expect(detectPackageManager(tmpDir)).toBe('make');
-  });
-
-  it('returns null when no indicators are present', () => {
-    expect(detectPackageManager(tmpDir)).toBeNull();
-  });
-
-  it('respects priority order: pnpm > npm > yarn > bun', () => {
-    // Все lock-файлы присутствуют — pnpm должен выиграть
-    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '');
-    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    expect(detectPackageManager(tmpDir)).toBe('pnpm');
-  });
-});
 
 describe('detectProjectStack', () => {
   let tmpDir: string;

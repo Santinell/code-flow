@@ -1,0 +1,34 @@
+{
+  "$schema": "https://swc.rs/schema.json",
+  "jsc": {
+    "parser": {
+      "syntax": "typescript",
+      "tsx": false,
+      "decorators": true,
+      "importAttributes": true,
+      "dynamicImport": true
+    },
+    "baseUrl": "./src",
+    "target": "es2022",
+    "keepClassNames": true,
+    "loose": true,
+    "paths": {
+      "#src/*": ["./*"],
+      "#config/*": ["./config/*"],
+      "#db/*": ["./db/*"],
+      "#evals/*": ["./evals/*"],
+      "#integrations/*": ["./integrations/*"],
+      "#mastra/*": ["./mastra/*"],
+      "#utils/*": ["./utils/*"]
+    },
+    "experimental": {
+      "keepImportAttributes": true
+    }
+  },
+  "exclude": ["node_modules", "dist", "^src/.*\\.test\\.ts$"],
+  "module": {
+    "type": "es6",
+    "importAttributesKeyword": "with",
+    "resolveFully": true
+  }
+}

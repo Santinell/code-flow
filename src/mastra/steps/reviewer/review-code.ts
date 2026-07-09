@@ -1,20 +1,20 @@
 import { createStep } from '@mastra/core/workflows';
-// import { getEnv } from '../../../config/env.js';
-import { createLogger } from '../../../utils/logger.js';
-import { getWorktreePath, runInWorktree } from '../../../utils/worktree-context.js';
-import { reviewerAgent } from '../../agents/reviewer.agent.js';
+import { getEnv } from '#config/env';
 import {
   stepReviewStructuredOutputScorer,
   stepReviewVerdictAlignedScorer,
-} from '../../evals/scorers/step-scorers.js';
+} from '#evals/scorers/step-scorers';
+import { reviewerAgent } from '#mastra/agents/reviewer-agent';
 import {
   reviewerReviewOutputSchema,
   reviewerDiffOutputSchema,
   reviewerGenerateOutputSchema,
-} from '../../workflows/reviewer.workflow.types.js';
+} from '#mastra/workflows/reviewer-workflow.types';
+import { createLogger } from '#utils/logger';
+import { getWorktreePath, runInWorktree } from '#utils/worktree-context';
 
 const log = createLogger('review-code-step');
-// const env = getEnv();
+const env = getEnv();
 
 export const reviewCodeStep = createStep({
   id: 'review-code',

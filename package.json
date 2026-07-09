@@ -3,18 +3,48 @@
   "version": "0.1.0",
   "description": "Automated agentic development system built on Mastra framework",
   "type": "module",
+  "imports": {
+    "#src/*": [
+      "./dist/*.js",
+      "./src/*.ts"
+    ],
+    "#config/*": [
+      "./dist/config/*.js",
+      "./src/config/*.ts"
+    ],
+    "#db/*": [
+      "./dist/db/*.js",
+      "./src/db/*.ts"
+    ],
+    "#evals/*": [
+      "./dist/evals/*.js",
+      "./src/evals/*.ts"
+    ],
+    "#integrations/*": [
+      "./dist/integrations/*.js",
+      "./src/integrations/*.ts"
+    ],
+    "#mastra/*": [
+      "./dist/mastra/*.js",
+      "./src/mastra/*.ts"
+    ],
+    "#utils/*": [
+      "./dist/utils/*.js",
+      "./src/utils/*.ts"
+    ]
+  },
   "scripts": {
-    "start": "tsx src/orchestrator.ts",
-    "build": "tsc",
-    "check": "tsc --noEmit && pnpm lint && pnpm format:check",
+    "start": "tsx src/index.ts",
+    "start:prod": "node dist/index.js",
+    "build": "tsc && swc src --copy-files --strip-leading-paths --out-dir ./dist",
+    "check": "tsc && pnpm lint && pnpm format:check",
     "trigger:architect": "tsx src/triggers/telegram-webhook.ts",
-    "trigger:poller": "tsx src/triggers/linear-poller.ts",
-    "trigger:scheduler": "tsx src/triggers/scheduler.ts",
-    "eval:architect": "tsx src/mastra/evals/experiments/agent-evals.ts --agent=architect",
-    "eval:developer": "tsx src/mastra/evals/experiments/agent-evals.ts --agent=developer",
-    "eval:reviewer": "tsx src/mastra/evals/experiments/agent-evals.ts --agent=reviewer",
-    "eval:workflows": "tsx src/mastra/evals/experiments/workflow-evals.ts",
-    "eval:ci": "tsx src/mastra/evals/experiments/agent-evals.ts --ci",
+    "trigger:poller": "tsx src/triggers/ticket-poller.ts",
+    "eval:architect": "tsx src/evals/experiments/agent-evals.ts --agent=architect",
+    "eval:developer": "tsx src/evals/experiments/agent-evals.ts --agent=developer",
+    "eval:reviewer": "tsx src/evals/experiments/agent-evals.ts --agent=reviewer",
+    "eval:workflows": "tsx src/evals/experiments/workflow-evals.ts",
+    "eval:ci": "tsx src/evals/experiments/agent-evals.ts --ci",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint .",
@@ -37,21 +67,21 @@
     "execa": "^9.6.1",
     "fast-glob": "^3.3.3",
     "grammy": "^1.44.0",
-    "node-cron": "^4.5.0",
     "ollama-ai-provider-v2": "^3.6.0",
     "pino": "^10.3.1",
     "simple-git": "^3.36.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.15.43",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.1.0",
-    "@types/node-cron": "^3.0.11",
     "@vitest/runner": "^4.1.9",
     "oxfmt": "^0.57.0",
     "oxlint": "^1.72.0",
-    "tsx": "^4.22.5",
-    "typescript": "^6.0.3",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.9"
   }
 }

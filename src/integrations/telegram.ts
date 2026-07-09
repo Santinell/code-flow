@@ -1,6 +1,6 @@
 import { Bot, Context, InlineKeyboard } from 'grammy';
-import { getEnv } from '../config/env.js';
-import { createLogger } from '../utils/logger.js';
+import { getEnv } from '#config/env';
+import { createLogger } from '#utils/logger';
 
 const env = getEnv();
 const log = createLogger('telegram');

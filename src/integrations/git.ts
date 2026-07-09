@@ -2,9 +2,9 @@ import { execaSync } from 'execa';
 import { CleanOptions, SimpleGit, simpleGit } from 'simple-git';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnv } from '../config/env.js';
-import { createLogger } from '../utils/logger.js';
-import { getCurrentWorktreePath, getWorktreePath } from '../utils/worktree-context.js';
+import { getEnv } from '#config/env';
+import { createLogger } from '#utils/logger';
+import { getCurrentWorktreePath, getWorktreePath } from '#utils/worktree-context';
 
 const log = createLogger('git');
 const env = getEnv();
@@ -91,7 +91,7 @@ export async function createWorktree(branchName: string): Promise<string> {
   const worktreePath = getWorktreePath(branchName);
 
   await mainGit.checkout(env.GIT_MAIN_BRANCH);
-  await mainGit.pull('origin', env.GIT_MAIN_BRANCH);
+  await mainGit.pull(env.GIT_REMOTE, env.GIT_MAIN_BRANCH);
 
   const branchExists = await branchExistsLocal(mainGit, branchName);
 
@@ -144,7 +144,7 @@ export async function mergeBranch(branchName: string): Promise<void> {
 
   await mainGit.checkout(env.GIT_MAIN_BRANCH);
   await mainGit.merge(['--no-ff', branchName]);
-  await mainGit.push('origin', env.GIT_MAIN_BRANCH);
+  await mainGit.push(env.GIT_REMOTE, env.GIT_MAIN_BRANCH);
 
   try {
     await mainGit.raw(['worktree', 'remove', worktreePath, '--force']);

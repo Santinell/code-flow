@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createLogger } from './logger.js';
-import { getCurrentWorktreePath } from './worktree-context.js';
+import { createLogger } from './logger';
+import { getCurrentWorktreePath } from './worktree-context';
 
 const log = createLogger('path-security');
 

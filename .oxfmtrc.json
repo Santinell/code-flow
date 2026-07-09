@@ -4,27 +4,12 @@
   "sortImports": {
     "customGroups": [
       {
-        "groupName": "loadFirst",
-        "elementNamePattern": ["**/mock-embeddings-indexer.ts"],
-        "modifiers": ["side_effect"]
-      },
-      {
         "groupName": "hash",
         "elementNamePattern": ["#*/**"]
       }
     ],
-    "groups": [
-      ["loadFirst"],
-      ["type"],
-      ["external"],
-      ["builtin"],
-      ["internal"],
-      ["hash"],
-      ["parent", "sibling"],
-      "index"
-    ],
+    "groups": [["type"], ["external"], ["builtin"], ["hash"], ["parent", "sibling"], "index"],
     "sortSideEffects": true,
-    "internalPattern": ["^@jvo/"],
     "newlinesBetween": false
   },
   "semi": true,

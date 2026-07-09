@@ -1,13 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
-import { getEnv } from '../../../config/env.js';
-import * as linear from '../../../integrations/linear.js';
-import { createLogger } from '../../../utils/logger.js';
+import { getTicketSystemConfig } from '#config/providers';
+import { getTicketProvider } from '#integrations/ticket/index';
 import {
   developerCommitOutputSchema,
   developerWorkflowOutputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
+import { createLogger } from '#utils/logger';
 
-const env = getEnv();
 const log = createLogger('move-to-review-step');
 
 export const moveToReviewStep = createStep({
@@ -15,16 +14,18 @@ export const moveToReviewStep = createStep({
   inputSchema: developerCommitOutputSchema,
   outputSchema: developerWorkflowOutputSchema,
   execute: async ({ inputData }) => {
+    const ticketSystem = getTicketProvider();
+    const { statuses } = getTicketSystemConfig();
     const taskId = inputData.taskId as string;
     const taskIdentifier = inputData.taskIdentifier as string;
 
-    await linear.updateTaskStatus(taskId, env.LINEAR_STATUS_REVIEW);
+    await ticketSystem.updateTaskStatus(taskId, statuses.review);
 
     log.info({ taskId, taskIdentifier }, 'Task moved to Review');
 
     return {
       ...inputData,
-      finalStatus: env.LINEAR_STATUS_REVIEW,
+      finalStatus: statuses.review,
       workflowStatus: 'completed' as const,
     };
   },

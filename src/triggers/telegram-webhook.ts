@@ -1,9 +1,9 @@
 import { createWorkflowStateReader } from '@mastra/core/workflows';
 import { Context } from 'grammy';
-import * as db from '../db/index.js';
-import { startPolling } from '../integrations/telegram.js';
-import { mastra } from '../mastra/index.js';
-import { createLogger } from '../utils/logger.js';
+import * as db from '#db/index';
+import { startPolling } from '#integrations/telegram';
+import { mastra } from '#mastra/index';
+import { createLogger } from '#utils/logger';
 
 const log = createLogger('telegram-trigger');
 

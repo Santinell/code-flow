@@ -1,18 +1,19 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "strict": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "declaration": true,
-    "sourceMap": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "noEmit": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "paths": {
+      "#src/*": ["./src/*"],
+      "#config/*": ["./src/config/*"],
+      "#db/*": ["./src/db/*"],
+      "#evals/*": ["./src/evals/*"],
+      "#integrations/*": ["./src/integrations/*"],
+      "#mastra/*": ["./src/mastra/*"],
+      "#utils/*": ["./src/utils/*"]
+    }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*.ts", "src/**/*.json"],
   "exclude": ["node_modules", "dist"]
 }

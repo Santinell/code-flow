@@ -1,12 +1,12 @@
 import { createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
-import * as telegram from '../../../integrations/telegram.js';
-import { createLogger } from '../../../utils/logger.js';
-import { escapeMarkdown } from '../../../utils/telegram-md.js';
+import * as telegram from '#integrations/telegram';
 import {
   architectCreateTasksInputSchema,
   architectPrioritySchema,
-} from '../../workflows/architect.workflow.types.js';
+} from '#mastra/workflows/architect-workflow.types';
+import { createLogger } from '#utils/logger';
+import { escapeMarkdown } from '#utils/telegram-md';
 
 const log = createLogger('confirm-tasks-step');
 

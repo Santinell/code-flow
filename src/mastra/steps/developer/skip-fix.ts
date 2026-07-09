@@ -2,7 +2,7 @@ import { createStep } from '@mastra/core/workflows';
 import {
   developerFixStepOutputSchema,
   developerRunTestsOutputSchema,
-} from '../../workflows/developer.workflow.types.js';
+} from '#mastra/workflows/developer-workflow.types';
 
 export const skipFixStep = createStep({
   id: 'skip-fix',

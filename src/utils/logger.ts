@@ -1,5 +1,5 @@
 import pino from 'pino';
-import { getEnv } from '../config/env.js';
+import { getEnv } from '#config/env';
 
 const env = getEnv();
 
