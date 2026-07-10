@@ -49,9 +49,24 @@ export const architectWorkflowOutputSchema = z.object({
 });
 
 export const architectGenerateOutputSchema = z.object({
-  message: z.string().describe('Conversational response to the user in Russian'),
-  needsClarification: z.boolean().describe('Whether user requirements need clarification'),
-  tasks: z.array(architectTaskSchema).describe('List of tasks extracted from the requirement'),
+  message: z
+    .string()
+    .optional()
+    .describe(
+      'Any free-form prose the model wants to say to the user (greeting, summary, context). Goes INSIDE the JSON, never outside it.'
+    ),
+  questions: z
+    .array(z.string())
+    .default([])
+    .describe(
+      'Clarifying questions to ask the user. Mutually exclusive with tasks: when non-empty, tasks must be empty.'
+    ),
+  tasks: z
+    .array(architectTaskSchema)
+    .default([])
+    .describe(
+      'List of tasks extracted from the requirement. Mutually exclusive with questions: when non-empty, questions must be empty.'
+    ),
 });
 
 export type ArchitectTask = z.infer<typeof architectTaskSchema>;

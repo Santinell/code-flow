@@ -1,5 +1,5 @@
 import { createWorkflow } from '@mastra/core/workflows';
-import { analyzeRequirements } from '../steps/architect/analyze-requirements';
+import { analyzeRequirementsStep } from '../steps/architect/analyze-requirements';
 import { confirmTasksStep } from '../steps/architect/confirm-tasks';
 import { createTasksStep } from '../steps/architect/create-tasks';
 import {
@@ -19,7 +19,7 @@ export const architectWorkflow = createWorkflow({
   inputSchema: architectWorkflowInputSchema,
   outputSchema: architectWorkflowOutputSchema,
 })
-  .then(analyzeRequirements)
+  .then(analyzeRequirementsStep)
   .then(confirmTasksStep)
   .then(createTasksStep)
   .commit();

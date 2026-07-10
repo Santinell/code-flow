@@ -6,6 +6,7 @@ import {
 } from '@mastra/evals/scorers/utils';
 import { getWorktreeDiffSync } from '#integrations/git';
 import { getModel } from '#mastra/model';
+import type { JsonValue } from '#mastra/types';
 import { getCurrentWorktreePath } from '#utils/worktree-context';
 
 export const judgeModel: LanguageModelV3 = getModel('judge');
@@ -33,13 +34,6 @@ export function enableJsonPromptInjection(scorer: MastraScorer): MastraScorer {
   }
   return scorer;
 }
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-interface JsonArray extends Array<JsonValue> {}
 
 export function getOutputText(
   output: ScorerRunOutputForAgent | ScorerRunOutputForLLMJudge

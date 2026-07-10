@@ -7,14 +7,8 @@ import type {
 } from '@mastra/core/processors';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { JsonObject, JsonValue } from '#mastra/types';
 import { getCurrentWorktreePath } from '#utils/worktree-context';
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-interface JsonArray extends Array<JsonValue> {}
 
 type ToolBudgetOptions = {
   maxSteps: number;
@@ -160,9 +154,8 @@ export class ToolBudgetProcessor implements Processor {
   private hasExplicitExistingPath(messages: ProcessInputStepArgs['messages']): boolean {
     const promptText = messages
       .map((message) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const content = (message as any).content;
-        return this.stringifyContent(content ?? '');
+        const textPart = message.content?.content ?? '';
+        return this.stringifyContent(textPart);
       })
       .join('\n');
     return this.hasExplicitExistingPathText(promptText);

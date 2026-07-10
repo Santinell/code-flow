@@ -1,13 +1,7 @@
 import { createScorer, type MastraScorers } from '@mastra/core/evals';
 import { z } from 'zod';
+import type { JsonValue } from '#mastra/types';
 import { judgeConfig } from './shared';
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-interface JsonArray extends Array<JsonValue> {}
 
 const ALLOWED_VERDICTS = ['approve', 'request_changes'] as const;
 

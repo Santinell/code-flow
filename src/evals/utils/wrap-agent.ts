@@ -1,6 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
+import type { JsonValue } from '#mastra/types';
 import { WORKTREE_PATH_CONTEXT_KEY } from '#mastra/workspace';
 import { createLogger } from '#utils/logger';
 import { runInWorktree } from '#utils/worktree-context';
@@ -40,8 +41,7 @@ function hasRetryableStructuredOutputError(schema: z.ZodSchema, result: Generate
 type GeneratePrompt = GenerateArgs[0];
 type GenerateOptions = {
   requestContext?: RequestContext;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any;
+  [key: string]: JsonValue | RequestContext | undefined;
 };
 type GenerateArgsRest = [prompt: GeneratePrompt, options?: GenerateOptions];
 

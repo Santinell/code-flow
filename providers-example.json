@@ -67,11 +67,11 @@
     },
     "judge": {
       "provider": "z-ai",
-      "model": "glm-5",
+      "model": "glm-5.2",
       "fallbacks": [
         {
           "provider": "deepseek",
-          "model": "deepseek-v4-flash"
+          "model": "deepseek-v4-pro"
         }
       ]
     },

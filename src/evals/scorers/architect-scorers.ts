@@ -37,6 +37,14 @@ function getResponse(output: ScorerRunOutputForAgent): ArchitectGenerateOutput {
   return output.at(-1)?.content.metadata?.structuredOutput as ArchitectGenerateOutput;
 }
 
+/**
+ * True, если архитектор запросил уточнение (questions непуст).
+ * Заменяет бывшее поле needsClarification во всех скорерах.
+ */
+function hasClarification(response: ArchitectGenerateOutput | undefined): boolean {
+  return (response?.questions?.length ?? 0) > 0;
+}
+
 function getInputText(input: ScorerRunInputForAgent | undefined): string {
   return getUserMessageFromRunInput(input) ?? '';
 }
@@ -56,10 +64,11 @@ export const architectTaskValidityScorer = createScorer({
     const input = getInputText(run.input);
     return {
       inputText: input.slice(0, 2000),
-      needsClarification: response?.needsClarification ?? false,
+      hasClarification: hasClarification(response),
+      questions: response?.questions ?? [],
       message: response?.message ?? '',
       tasks: response?.tasks ?? [],
-      parsed: response !== null,
+      parsed: response != null,
     };
   })
   .analyze({
@@ -73,11 +82,17 @@ export const architectTaskValidityScorer = createScorer({
       explanation: z.string(),
     }),
     createPrompt: ({ results }) => {
-      const { inputText, needsClarification, message, tasks, parsed } =
-        results.preprocessStepResult ?? {};
+      const {
+        inputText,
+        hasClarification: isClarification,
+        questions,
+        message,
+        tasks,
+        parsed,
+      } = results.preprocessStepResult ?? {};
 
       if (!parsed) {
-        return `The architect agent output could not be parsed as valid JSON with message/needsClarification/tasks fields.
+        return `The architect agent output could not be parsed as valid JSON with message/questions/tasks fields.
 
 Input: ${inputText.slice(0, 500)}
 
@@ -92,19 +107,23 @@ Respond in JSON:
 }`;
       }
 
+      const questionsText = (questions ?? []).join('\n');
       const tasksJson = JSON.stringify(tasks, null, 2);
       return `You are evaluating the output of an AI architect agent that analyzed a user requirement.
 
 User requirement: ${inputText.slice(0, 500)}
-needsClarification: ${needsClarification}
+hasClarification: ${isClarification}
 Message to user: ${message.slice(0, 500)}
 
-Tasks (${tasks.length}):
+Questions (${(questions ?? []).length}):
+${questionsText.slice(0, 1500)}
+
+Tasks (${(tasks ?? []).length}):
 ${tasksJson.slice(0, 2000)}
 
 Evaluate:
 
-1. If needsClarification is true:
+1. If hasClarification is true (architect asked clarifying questions):
    - tasks must be empty []
    - messageQualityScore (0-1) based on the quality of clarifying questions:
      * 0.85-1.0: 3+ specific, relevant questions that reference actual project files/paths from the codebase
@@ -114,7 +133,7 @@ Evaluate:
      * 0.00-0.14: no questions or completely irrelevant/noise
    - taskValidityScore: 1.0 when tasks is empty (which is correct for clarification), 0 otherwise
 
- 2. If needsClarification is false:
+ 2. If hasClarification is false (architect produced tasks):
     - tasks must contain at least 1 task
     - Each task must have:
       * title: clear, actionable, non-empty
@@ -142,11 +161,24 @@ Respond in JSON:
     if (!results.preprocessStepResult?.parsed) {
       return 0;
     }
-    const needsClarification = results.preprocessStepResult?.needsClarification;
-    if (needsClarification) {
+    const isClarification = results.preprocessStepResult?.hasClarification;
+    if (isClarification) {
+      return r.messageQualityScore ?? 0;
+    }
+    // Для кейсов с задачами оценка определяется структурной валидностью самих
+    // задач. Качество summary-сообщения оценивается отдельным скорером, поэтому
+    // не усредняем — иначе краткое summary топило оценку при идеальной структуре.
+    //
+    // judge-модель иногда опускает taskValidityScore в ответе. Fallback на
+    // messageQualityScore (лучше жёсткого 0), а если и его нет — на r.valid
+    // (судя по тому, что parsed=true и judge вернул результат).
+    if (typeof r.taskValidityScore === 'number') {
+      return r.taskValidityScore;
+    }
+    if (typeof r.messageQualityScore === 'number') {
       return r.messageQualityScore;
     }
-    return (r.taskValidityScore + r.messageQualityScore) / 2;
+    return r.valid ? 1 : 0;
   })
   .generateReason(({ results }) => {
     const r = results.analyzeStepResult;
@@ -171,8 +203,8 @@ export const architectClarificationQualityScorer = createScorer({
     const input = getInputText(run.input);
     return {
       inputText: input.slice(0, 2000),
-      needsClarification: response?.needsClarification ?? false,
-      message: response?.message ?? '',
+      hasClarification: hasClarification(response),
+      questions: response?.questions ?? [],
     };
   })
   .analyze({
@@ -188,9 +220,13 @@ export const architectClarificationQualityScorer = createScorer({
       explanation: z.string(),
     }),
     createPrompt: ({ results }) => {
-      const { inputText, needsClarification, message } = results.preprocessStepResult ?? {};
+      const {
+        inputText,
+        hasClarification: isClarification,
+        questions,
+      } = results.preprocessStepResult ?? {};
 
-      if (!needsClarification || !message) {
+      if (!isClarification || !questions || questions.length === 0) {
         return `Clarification was not needed for this request. Score is not applicable.
 
 Respond in JSON:
@@ -206,8 +242,10 @@ Respond in JSON:
 }`;
       }
 
+      const questionsText = questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
       return `User requirement: ${inputText.slice(0, 500)}
-Architect clarification response: ${message.slice(0, 1500)}
+Architect clarifying questions:
+${questionsText.slice(0, 1500)}
 
 Evaluate the quality of the architect's clarifying questions:
 1. Specific: questions target concrete ambiguities, not generic
@@ -258,8 +296,9 @@ export const architectResponseLanguageScorer = createScorer({
     }
     const input = getInputText(run.input);
 
-    const outputText = response.message;
-    if (!outputText || outputText.trim().length === 0) {
+    // message опционально в новой схеме; fallback на questions для определения языка
+    const outputText = response.message ?? response.questions?.join(' ') ?? '';
+    if (outputText.trim().length === 0) {
       return 1;
     }
 
@@ -317,7 +356,7 @@ export const architectTaskCountScorer = createScorer({
     if (!response) {
       return 0;
     }
-    if (response.needsClarification) {
+    if (hasClarification(response)) {
       return 1;
     }
     const count = response.tasks.length;
@@ -334,7 +373,7 @@ export const architectTaskCountScorer = createScorer({
     if (!response) {
       return 'Could not parse architect response';
     }
-    if (response.needsClarification) {
+    if (hasClarification(response)) {
       return 'Clarification needed — no tasks expected';
     }
     const count = response.tasks.length;
@@ -401,9 +440,9 @@ function createArchitectFaithfulnessAnalyzePrompt({
   claims: string[];
   context: string[];
 }): string {
-  return `Verify each claim against the user requirements. Determine if each claim is supported by, contradicts, or adds to the requirements.
+  return `Verify each claim against the provided context, which combines the user requirements AND the codebase the architect explored. Determine if each claim is supported by, contradicts, or adds to what is available in the context.
 
-User Requirements (Context):
+Context (User Requirements + explored Codebase):
 ${context.join('\n')}
 
 Number of claims: ${claims.length}
@@ -412,15 +451,25 @@ Claims to verify:
 ${claims.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 For each claim, provide a verdict:
-- "yes" if the claim is mentioned or clearly implied by the user requirements
-- "no" if the claim directly contradicts the requirements
-- "unsure" if the claim adds features/details not in the requirements
+- "yes" if the claim is mentioned or clearly implied by the user requirements, OR is grounded in (accurately describes) the explored codebase provided in the context above
+- "no" if the claim directly contradicts the requirements or the explored codebase
+- "unsure" if the claim adds features/details not in the requirements AND not supported by the explored codebase
 
 Rules:
+- A claim that accurately describes the existing codebase (files, types, functions, stack, dependencies — e.g. "the project uses Express + TypeScript", "listUsers calls findMany then count", "src/services/smtp.ts provides sendEmail") is "yes", NOT "unsure". The architect is expected to ground its output in the code it explored; doing so is faithful, not a hallucination.
 - Reasonable technical elaboration is "yes" (e.g., "create API" for "add feature")
-- Standard implementation patterns are "yes"
-- NEW features not requested are "unsure"
-- Be lenient with logical implications
+- Standard implementation patterns are "yes". These are details that logically follow from ANY requirement to implement a feature and are NOT new features. They include:
+  * Configuration via env variables / config files (e.g., APP_BASE_URL, NOTIFICATION_DEFAULT_RECIPIENT, SMTP settings)
+  * Error handling, try/catch, logging, and graceful degradation
+  * Unit tests with mocks for the new functionality
+  * Helper utilities (e.g., HTML escaping, URL builders, validation helpers)
+  * Input validation and edge-case handling (empty inputs, missing fields)
+  * TypeScript types/interfaces for new data structures
+  * Wiring new code into existing entry points (routes, exports, imports)
+  Such claims are "yes" because they are standard engineering practice required to make the requested feature work, not scope expansion.
+- NEW features/requirements not requested and not present in the codebase are "unsure". A "new feature" is a distinct capability the user did not ask for and that is not needed to fulfill the request (e.g., user asks for email notifications, architect adds a full admin dashboard). Implementation details of the requested feature (see above) are NOT new features.
+- Misrepresenting the actual contents of an explored file is "no"
+- Be lenient with logical implications. When in doubt whether a claim is standard elaboration vs a new feature, lean toward "yes".
 
 Format:
 {
@@ -452,6 +501,16 @@ export const architectFaithfulnessScorer = enableJsonPromptInjection(
       }),
       createPrompt: ({ run }) => {
         const response = getResponse(run.output);
+
+        // Clarification-ответы не утверждают, что что-либо строится — это вопросы
+        // к пользователю. У них нет claims о реализации, поэтому extract тут не
+        // нужен: возвращаем пустой массив → analyze даст 0 verdicts → score 1.0.
+        // Это устраняет шум judge'а 0.00↔1.00 между прогонами (наблюдения о
+        // кодовой базе помечались то yes, то unsure).
+        if (hasClarification(response)) {
+          return createArchitectFaithfulnessExtractPrompt({ output: '{}' });
+        }
+
         const outputText = JSON.stringify(
           {
             message: response?.message,
@@ -553,7 +612,7 @@ export const architectCompletenessScorer = createScorer({
       response,
       groundTruth,
       actualTasks: response?.tasks.length ?? 0,
-      needsClarification: response?.needsClarification ?? false,
+      hasClarification: hasClarification(response),
     };
   })
   .analyze({
@@ -565,10 +624,15 @@ export const architectCompletenessScorer = createScorer({
       explanation: z.string(),
     }),
     createPrompt: ({ results }) => {
-      const { inputText, response, groundTruth, actualTasks, needsClarification } =
-        results.preprocessStepResult ?? {};
+      const {
+        inputText,
+        response,
+        groundTruth,
+        actualTasks,
+        hasClarification: isClarification,
+      } = results.preprocessStepResult ?? {};
 
-      if (needsClarification || !response || !groundTruth) {
+      if (isClarification || !response || !groundTruth) {
         return `The architect requested clarification or ground truth is not available. Score as complete (1.0).
 
 Respond in JSON:
@@ -811,7 +875,7 @@ export const architectPromptAlignmentScorer = createScorer({
       ? JSON.stringify(
           {
             message: response.message,
-            needsClarification: response.needsClarification,
+            questions: response.questions,
             tasks: response.tasks,
           },
           null,
@@ -822,18 +886,22 @@ export const architectPromptAlignmentScorer = createScorer({
     return {
       userPrompt: userPrompt.slice(0, 3000),
       agentResponse,
-      needsClarification: response?.needsClarification ?? false,
+      hasClarification: hasClarification(response),
     };
   })
   .analyze({
     description: 'Analyze prompt-response alignment across multiple dimensions',
     outputSchema: architectAlignmentAnalyzeSchema,
     createPrompt: ({ results }) => {
-      const { userPrompt, agentResponse, needsClarification } = results.preprocessStepResult ?? {};
+      const {
+        userPrompt,
+        agentResponse,
+        hasClarification: isClarification,
+      } = results.preprocessStepResult ?? {};
       return createArchitectAlignmentAnalyzePrompt({
         userPrompt: userPrompt ?? '',
         agentResponse: agentResponse ?? '',
-        needsClarification: needsClarification ?? false,
+        needsClarification: isClarification ?? false,
       });
     },
   })
@@ -920,11 +988,13 @@ export const architectKeywordCoverageScorer = createScorer({
       return 1;
     }
 
-    // Search both tasks AND message (covers clarification responses where tasks is empty)
+    // Search tasks, message, AND questions (covers clarification responses where tasks is empty)
     const outputText = (
       JSON.stringify(response.tasks) +
       ' ' +
-      (response.message ?? '')
+      (response.message ?? '') +
+      ' ' +
+      JSON.stringify(response.questions ?? [])
     ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 
@@ -948,7 +1018,9 @@ export const architectKeywordCoverageScorer = createScorer({
     const outputText = (
       JSON.stringify(response?.tasks) +
       ' ' +
-      (response?.message ?? '')
+      (response?.message ?? '') +
+      ' ' +
+      JSON.stringify(response?.questions ?? [])
     ).toLowerCase();
     const requiredKeywords = groundTruth.requiredKeywords;
 

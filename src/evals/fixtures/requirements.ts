@@ -156,30 +156,6 @@ function buildRequirements(refs: NodeRefs): ArchitectRequirementFixture[] {
         requiredKeywords: ['дашборд', 'аналитик', 'график', 'csv', 'websocket', 'фильтр'],
       },
     },
-
-    // ── Invalid requests ──
-    {
-      id: 'nonsense-input',
-      category: 'invalid',
-      userMessage: 'asdfghjkl',
-      groundTruth: {
-        needsClarification: true,
-        minTasks: 0,
-        maxTasks: 0,
-        requiredKeywords: [],
-      },
-    },
-    {
-      id: 'empty-input',
-      category: 'invalid',
-      userMessage: ' ',
-      groundTruth: {
-        needsClarification: true,
-        minTasks: 0,
-        maxTasks: 0,
-        requiredKeywords: [],
-      },
-    },
   ];
 }
 

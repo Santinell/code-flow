@@ -130,7 +130,7 @@ Key variables (full list in `.env.example`):
 | `WORKTREE_PATH`                       | Directory for isolated worktrees                                      |
 | `GIT_MAIN_BRANCH`                     | Branch to branch from (default `main`)                                |
 | `GIT_REMOTE`                          | Git remote name (default `origin`)                                    |
-| `MAX_CONCURRENT_*`                    | Parallelism caps for developer/reviewer evals                         |
+| `MAX_CONCURRENT_*`                    | Parallelism caps for developer/reviewer/architect evals               |
 | `MAX_STEPS_*` / `MAX_OUTPUT_TOKENS_*` | Per-agent step and output-token budgets                               |
 | `ALLOWED_BINARIES`                    | Extra binaries for agent-derived commands (see below). Optional       |
 | `EMBEDDING_MEMORY`                    | Enable semantic recall memory via embeddings                          |
@@ -175,7 +175,7 @@ During a session, the Architect asks clarifying questions and presents task prop
 ## Evaluation
 
 ```bash
-pnpm eval:architect    # Architect agent evals
+pnpm eval:architect    # Architect agent evals (--lang=node|python)
 pnpm eval:developer    # Developer agent evals (--lang=node|python)
 pnpm eval:reviewer     # Reviewer agent evals (--lang=node|python)
 pnpm eval:workflows    # Workflow-level evals

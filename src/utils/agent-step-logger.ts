@@ -1,12 +1,6 @@
 import type { LLMStepResult } from '@mastra/core/agent';
+import type { JsonValue } from '#mastra/types';
 import { createLogger } from './logger';
-
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonObject | JsonArray;
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-interface JsonArray extends Array<JsonValue> {}
 
 type StepFinishPayload = Pick<
   LLMStepResult,

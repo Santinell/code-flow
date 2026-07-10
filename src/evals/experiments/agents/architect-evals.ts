@@ -13,6 +13,7 @@ import {
 import { architectScorerRegistry, setGroundTruthData } from '#evals/scorers/index';
 import { createTokenUsageTracker } from '#evals/utils/token-usage';
 import { wrapAgent } from '#evals/utils/wrap-agent';
+import { wrapScorer } from '#evals/utils/wrap-scorer';
 import { applyPatch, commitFiles, initGitRepo, stageAllFiles } from '#integrations/git';
 import { architectAgent } from '#mastra/agents/architect-agent';
 import { architectGenerateOutputSchema } from '#mastra/workflows/architect-workflow.types';
@@ -119,6 +120,24 @@ export async function runArchitectAgentEvals(lang: EvalLanguage) {
   const config = LANGUAGE_CONFIGS[lang];
   const dataset = config.dataset;
 
+  // Подавляем шум от Mastra: tryStreamWithJsonFallback (chunk-XJNAKXUS.js:2205)
+  // делает console.warn при КАЖДОМ провале structured output у judge-модели,
+  // после чего сам делает внутренний retry. Это не ошибка проекта — штатный
+  // fallback Mastra — но шумит в логах. Фильтруем только это сообщение,
+  // остальной console.warn пропускаем.
+  const originalWarn = console.warn;
+  type WarnArgs = Parameters<typeof console.warn>;
+  console.warn = (...args: WarnArgs) => {
+    const first = args[0];
+    if (
+      typeof first === 'string' &&
+      (first.includes('tryStreamWithJsonFallback') || first.includes('tryGenerateWithJsonFallback'))
+    ) {
+      return;
+    }
+    originalWarn(...args);
+  };
+
   // Initialize ground truth data for scorers
   setGroundTruthData(dataset);
 
@@ -161,11 +180,13 @@ export async function runArchitectAgentEvals(lang: EvalLanguage) {
       target: wrappedArchitectAgent,
       data: dataset,
       scorers: {
-        agent: Object.values(architectScorerRegistry),
+        agent: Object.values(architectScorerRegistry).map((scorer) =>
+          wrapScorer(scorer, { maxAttempts: 3 })
+        ),
       },
       targetOptions: {
         modelSettings: {
-          temperature: 0,
+          temperature: 0.2,
           maxRetries: 3,
           maxOutputTokens: env.MAX_OUTPUT_TOKENS_ARCHITECT,
         },
@@ -186,7 +207,7 @@ export async function runArchitectAgentEvals(lang: EvalLanguage) {
             : inputLabel;
         const parsedOutput = architectGenerateOutputSchema.safeParse(targetResult.object);
         const outputSummary = parsedOutput.success
-          ? `needsClarification=${parsedOutput.data.needsClarification}, tasks=${parsedOutput.data.tasks.length}, message="${parsedOutput.data.message.replace(/\s+/g, ' ')}"`
+          ? `questions=${parsedOutput.data.questions.length}, tasks=${parsedOutput.data.tasks.length}, message="${(parsedOutput.data.message ?? '').replace(/\s+/g, ' ')}"`
           : `text="${targetResult.text.replace(/\s+/g, ' ')}"`;
         tokenUsage.record(targetResult);
 
@@ -220,6 +241,7 @@ export async function runArchitectAgentEvals(lang: EvalLanguage) {
 
     return result;
   } finally {
+    console.warn = originalWarn;
     teardownEvalSandbox(worktreePath);
   }
 }
